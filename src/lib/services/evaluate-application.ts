@@ -1,8 +1,21 @@
 import type { DataRepository } from "@/lib/data/repository";
 import type { Evaluation } from "@/lib/data/types";
 import { evaluateRole } from "@/lib/evaluation";
+import {
+  countEvaluationsToday,
+  EvaluationQuotaError,
+  getDailyEvaluationLimit,
+} from "@/lib/evaluation-quota";
 
 export const EVALUATION_PROMPT_VERSION = "3.0";
+const PUBLIC_EVALUATION_FAILURE = "Evaluation could not be completed. Try again later.";
+
+export class EvaluationExecutionError extends Error {
+  constructor() {
+    super(PUBLIC_EVALUATION_FAILURE);
+    this.name = "EvaluationExecutionError";
+  }
+}
 
 export async function evaluateApplication(repository: DataRepository, applicationId: string, options: { force?: boolean } = {}): Promise<{ evaluation: Evaluation; isDemo: boolean; reused: boolean }> {
   const application = await repository.getApplication(applicationId);
@@ -13,6 +26,14 @@ export async function evaluateApplication(repository: DataRepository, applicatio
 
   const pending = await repository.createEvaluation({ applicationId: application.id, jobId: application.jobId, cvVersionId: application.cvVersionId, status: "running", promptVersion: EVALUATION_PROMPT_VERSION });
   try {
+    if (process.env.OPENAI_API_KEY) {
+      const limit = getDailyEvaluationLimit();
+      // Reserve first, then count committed reservations. This prevents parallel
+      // requests from all passing a pre-insert count near the limit.
+      const attemptsToday = countEvaluationsToday(await repository.listEvaluations());
+      if (attemptsToday > limit) throw new EvaluationQuotaError(limit);
+    }
+
     const output = await evaluateRole({ jobTitle: application.job.title, company: application.job.company, jobDescription: application.job.description, cvName: application.cvVersion.name, cvContent: application.cvVersion.content });
     const result = output.result;
     const evaluation = await repository.updateEvaluation(pending.id, {
@@ -27,7 +48,11 @@ export async function evaluateApplication(repository: DataRepository, applicatio
     await repository.createApplicationEvent({ applicationId: application.id, type: "evaluation_completed", title: `Evaluation completed · ${result.overallScore}/100`, details: output.isDemo ? "Deterministic demo evaluator" : `Model: ${output.model}`, metadata: { evaluationId: evaluation.id } });
     return { evaluation, isDemo: output.isDemo, reused: false };
   } catch (error) {
-    await repository.updateEvaluation(pending.id, { status: "failed", errorMessage: error instanceof Error ? error.message : "Evaluation failed." });
-    throw error;
+    const publicMessage = error instanceof EvaluationQuotaError
+      ? error.message
+      : PUBLIC_EVALUATION_FAILURE;
+    await repository.updateEvaluation(pending.id, { status: "failed", errorMessage: publicMessage });
+    if (error instanceof EvaluationQuotaError) throw error;
+    throw new EvaluationExecutionError();
   }
 }

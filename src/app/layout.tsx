@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Pathfinder", template: "%s · Pathfinder" },
+  title: { default: "GreenCV", template: "%s · GreenCV" },
   description: "A personal job-search intelligence workspace"
 };
 

@@ -519,32 +519,10 @@ export class SupabaseDataRepository implements DataRepository {
   }
 
   async updateJob(id: string, input: JobUpdateInput): Promise<Job> {
-    const update: Database["public"]["Tables"]["jobs"]["Update"] = {};
-    if (input.title !== undefined) update.title = input.title.trim();
-    if (input.company !== undefined) update.company = input.company.trim();
-    if (input.description !== undefined) update.description = input.description.trim();
-    if (input.location !== undefined) update.location = input.location?.trim() || null;
-    if (input.workplaceType !== undefined) update.workplace_type = input.workplaceType;
-    if (input.employmentType !== undefined) update.employment_type = input.employmentType;
-    if (input.source !== undefined) update.source = input.source;
-    if (input.sourceUrl !== undefined) update.source_url = input.sourceUrl?.trim() || null;
-    if (input.externalId !== undefined) update.external_id = input.externalId?.trim() || null;
-    if (input.salaryMin !== undefined) update.salary_min = input.salaryMin;
-    if (input.salaryMax !== undefined) update.salary_max = input.salaryMax;
-    if (input.salaryCurrency !== undefined) {
-      update.salary_currency = input.salaryCurrency?.trim().toUpperCase() || null;
-    }
-    if (input.publishedAt !== undefined) update.published_at = input.publishedAt;
-    const { data, error } = await this.client
-      .from("jobs")
-      .update(update)
-      .eq("id", id)
-      .eq("user_id", this.userId)
-      .select("*")
-      .maybeSingle();
-    throwQueryError(error);
-    if (!data) throw new DataNotFoundError("Job", id);
-    return toJob(data);
+    const job = await this.getJob(id);
+    if (!job) throw new DataNotFoundError("Job", id);
+    void input;
+    throw new DataConflictError("Captured job snapshots are immutable; create a new role instead.");
   }
 
   async listApplicationEvents(applicationId: string): Promise<ApplicationEvent[]> {
@@ -625,14 +603,11 @@ export class SupabaseDataRepository implements DataRepository {
   }
 
   async updateCvVersion(id: string, input: CvVersionUpdateInput): Promise<CvVersion> {
+    if (Object.keys(input).some((key) => key !== "name" && key !== "isDefault")) {
+      throw new DataConflictError("Imported CV evidence is immutable; create a new version instead.");
+    }
     const update: Database["public"]["Tables"]["cv_versions"]["Update"] = {};
     if (input.name !== undefined) update.name = input.name.trim();
-    if (input.content !== undefined) update.content = input.content.trim();
-    if (input.summary !== undefined) update.summary = input.summary?.trim() || null;
-    if (input.fileName !== undefined) update.file_name = input.fileName?.trim() || null;
-    if (input.storagePath !== undefined) update.storage_path = input.storagePath?.trim() || null;
-    if (input.mimeType !== undefined) update.mime_type = input.mimeType?.trim() || null;
-    if (input.skills !== undefined) update.skills = input.skills;
     if (input.isDefault !== undefined) update.is_default = input.isDefault;
     const { data, error } = await this.client
       .from("cv_versions")

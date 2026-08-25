@@ -23,6 +23,13 @@ export type DashboardMetrics = {
   funnel: Array<{ stage: "Discovered" | "Applied" | "Responded" | "Interview" | "Offer"; value: number }>;
 };
 
+export function calculatePipelineSummary(applications: Array<{ status: string }>) {
+  return {
+    activeApplications: applications.filter(application => ACTIVE_STATUSES.has(application.status)).length,
+    interviews: applications.filter(application => application.status === "interview").length,
+  };
+}
+
 const RESPONSE_EVENTS = new Set(["response_received", "screening_scheduled", "interview_scheduled"]);
 
 function inRange(value: string | null | undefined, from: number, to: number) {

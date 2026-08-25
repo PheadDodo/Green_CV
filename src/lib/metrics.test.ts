@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateDashboardMetrics, type MetricApplication } from "./metrics";
+import { calculateDashboardMetrics, calculatePipelineSummary, type MetricApplication } from "./metrics";
 
 const now = new Date("2026-08-21T12:00:00.000Z");
 
@@ -59,5 +59,18 @@ describe("calculateDashboardMetrics", () => {
         { stage: "Offer", value: 0 }
       ]
     });
+  });
+});
+
+describe("calculatePipelineSummary", () => {
+  it("uses the documented active and interview status definitions", () => {
+    expect(calculatePipelineSummary([
+      { status: "saved" },
+      { status: "applied" },
+      { status: "screening" },
+      { status: "interview" },
+      { status: "offer" },
+      { status: "rejected" },
+    ])).toEqual({ activeApplications: 3, interviews: 1 });
   });
 });

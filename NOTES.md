@@ -13,10 +13,13 @@ prototype switcher and the three static variants were removed after the decision
 
 ## Product boundary
 
-Pathfinder is a personal job-search intelligence workspace, not a scraper or a
+GreenCV is a personal job-search intelligence workspace, not a scraper or a
 generic CRM. It preserves what happened and uses the selected CV plus the preserved
 job description to explain why a role is worth pursuing. Suggestions may emphasize
 existing evidence but never invent experience.
+
+Preservation means retained job and CV evidence is immutable in place and events are
+append-only. Owner-initiated deletion remains available as a privacy operation.
 
 ## Metric definitions
 

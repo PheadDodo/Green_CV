@@ -1,6 +1,7 @@
 import { DEMO_USER_EMAIL, DEMO_USER_ID } from "./data/seed";
 import { isSupabaseConfigured } from "./supabase/env";
 import { createClient } from "./supabase/server";
+import { isAccountAuthorized } from "./signup-policy";
 
 export interface AuthUser {
   id: string;
@@ -58,7 +59,8 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const client = await createClient();
   const { data, error } = await client.auth.getUser();
   if (error) return null;
-  return data.user ? mapSupabaseUser(data.user) : null;
+  if (!data.user || !isAccountAuthorized(data.user.email)) return null;
+  return mapSupabaseUser(data.user);
 }
 
 export async function requireUser(): Promise<AuthUser> {
@@ -77,6 +79,10 @@ export async function signInWithPassword(email: string, password: string): Promi
   const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error) throw error;
   if (!data.user) throw new AuthRequiredError("Sign in did not return a user.");
+  if (!isAccountAuthorized(data.user.email)) {
+    await client.auth.signOut();
+    throw new AuthRequiredError("This account is not authorized for this workspace.");
+  }
   return mapSupabaseUser(data.user);
 }
 
@@ -84,13 +90,20 @@ export async function signUpWithPassword(
   email: string,
   password: string,
   displayName?: string,
+  emailRedirectTo?: string,
 ): Promise<SignUpResult> {
   if (!isSupabaseConfigured()) return { user: DEMO_AUTH_USER, requiresEmailConfirmation: false };
   const client = await createClient();
   const { data, error } = await client.auth.signUp({
     email,
     password,
-    options: displayName ? { data: { full_name: displayName } } : undefined,
+    options:
+      displayName || emailRedirectTo
+        ? {
+            ...(displayName ? { data: { full_name: displayName } } : {}),
+            ...(emailRedirectTo ? { emailRedirectTo } : {}),
+          }
+        : undefined,
   });
   if (error) throw error;
   return {
@@ -105,4 +118,3 @@ export async function signOut(): Promise<void> {
   const { error } = await client.auth.signOut();
   if (error) throw error;
 }
-

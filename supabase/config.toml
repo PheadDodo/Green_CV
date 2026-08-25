@@ -1,4 +1,4 @@
-project_id = "pathfinder"
+project_id = "greencv"
 
 [api]
 enabled = true

@@ -1,41 +1,46 @@
 {
-  "name": "pathfinder-job-intelligence",
+  "name": "green-cv",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "packageManager": "npm@11.17.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@supabase/ssr": "latest",
-    "@supabase/supabase-js": "latest",
-    "lucide-react": "latest",
-    "mammoth": "^1.12.1",
-    "next": "latest",
-    "openai": "latest",
-    "pdf-parse": "^1.1.1",
-    "react": "latest",
-    "react-dom": "latest",
-    "recharts": "latest",
-    "zod": "latest"
+    "@supabase/ssr": "0.12.4",
+    "@supabase/supabase-js": "2.112.3",
+    "lucide-react": "1.33.0",
+    "mammoth": "1.12.1",
+    "next": "16.3.1",
+    "openai": "7.5.0",
+    "pdf-parse": "1.1.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "recharts": "3.10.1",
+    "server-only": "0.0.1",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "latest",
-    "@testing-library/jest-dom": "latest",
-    "@testing-library/react": "latest",
-    "@types/node": "latest",
-    "@types/pdf-parse": "^1.1.5",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "eslint": "latest",
-    "eslint-config-next": "latest",
-    "jsdom": "latest",
-    "typescript": "latest",
-    "vitest": "latest"
+    "@eslint/eslintrc": "3.3.6",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "26.2.0",
+    "@types/pdf-parse": "1.1.5",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.1",
+    "jsdom": "30.0.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
   }
 }

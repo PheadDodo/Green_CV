@@ -12,7 +12,7 @@ afterEach(async () => {
 
 describe("LocalDataRepository", () => {
   it("initializes one valid store under concurrent first reads", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "pathfinder-store-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
     temporaryDirectories.push(directory);
     const filePath = path.join(directory, "store.json");
     const repositories = Array.from({ length: 16 }, () => new LocalDataRepository({ filePath }));
@@ -23,7 +23,7 @@ describe("LocalDataRepository", () => {
   });
 
   it("persists a status transition across repository instances", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "pathfinder-store-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
     temporaryDirectories.push(directory);
     const filePath = path.join(directory, "store.json");
     const first = new LocalDataRepository({ filePath });
@@ -33,5 +33,27 @@ describe("LocalDataRepository", () => {
     const reloaded = await second.getApplication(application.id);
     expect(reloaded?.status).toBe("screening");
     expect(reloaded?.events[0]?.details).toBe("Recruiter replied");
+  });
+
+  it("keeps a captured job snapshot immutable", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
+    temporaryDirectories.push(directory);
+    const repository = new LocalDataRepository({ filePath: path.join(directory, "store.json") });
+    const job = (await repository.listJobs())[0];
+
+    await expect(repository.updateJob(job.id, { description: "Rewritten evidence" }))
+      .rejects.toThrow(/immutable/i);
+    expect((await repository.getJob(job.id))?.description).toBe(job.description);
+  });
+
+  it("keeps imported CV content immutable", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
+    temporaryDirectories.push(directory);
+    const repository = new LocalDataRepository({ filePath: path.join(directory, "store.json") });
+    const cv = (await repository.listCvVersions())[0];
+
+    await expect(repository.updateCvVersion(cv.id, { content: "Rewritten CV evidence" } as never))
+      .rejects.toThrow(/immutable/i);
+    expect((await repository.getCvVersion(cv.id))?.content).toBe(cv.content);
   });
 });

@@ -537,33 +537,11 @@ export class LocalDataRepository implements DataRepository {
     });
   }
 
-  updateJob(id: string, input: JobUpdateInput): Promise<Job> {
-    return this.mutate((document) => {
-      const job = requireOwned(document.jobs, id, this.userId, "Job");
-      if (input.title !== undefined) job.title = input.title.trim();
-      if (input.company !== undefined) job.company = input.company.trim();
-      if (input.description !== undefined) job.description = input.description.trim();
-      if (input.location !== undefined) job.location = input.location?.trim() || null;
-      if (input.workplaceType !== undefined) job.workplaceType = input.workplaceType;
-      if (input.employmentType !== undefined) job.employmentType = input.employmentType;
-      if (input.source !== undefined) job.source = input.source;
-      if (input.sourceUrl !== undefined) job.sourceUrl = input.sourceUrl?.trim() || null;
-      if (input.externalId !== undefined) job.externalId = input.externalId?.trim() || null;
-      if (input.salaryMin !== undefined) job.salaryMin = input.salaryMin;
-      if (input.salaryMax !== undefined) job.salaryMax = input.salaryMax;
-      if (input.salaryCurrency !== undefined) {
-        job.salaryCurrency = input.salaryCurrency?.trim().toUpperCase() || null;
-      }
-      if (input.publishedAt !== undefined) job.publishedAt = input.publishedAt;
-      if (!job.title || !job.company || !job.description) {
-        throw new DataConflictError("A job requires a title, company, and description.");
-      }
-      if (job.salaryMin !== null && job.salaryMax !== null && job.salaryMin > job.salaryMax) {
-        throw new DataConflictError("Minimum salary cannot exceed maximum salary.");
-      }
-      job.updatedAt = now();
-      return job;
-    });
+  async updateJob(id: string, input: JobUpdateInput): Promise<Job> {
+    const job = await this.getJob(id);
+    if (!job) throw new DataNotFoundError("Job", id);
+    void input;
+    throw new DataConflictError("Captured job snapshots are immutable; create a new role instead.");
   }
 
   async listApplicationEvents(applicationId: string): Promise<ApplicationEvent[]> {
@@ -666,18 +644,11 @@ export class LocalDataRepository implements DataRepository {
   updateCvVersion(id: string, input: CvVersionUpdateInput): Promise<CvVersion> {
     return this.mutate((document) => {
       const cvVersion = requireOwned(document.cvVersions, id, this.userId, "CV version");
+      if (Object.keys(input).some((key) => key !== "name" && key !== "isDefault")) {
+        throw new DataConflictError("Imported CV evidence is immutable; create a new version instead.");
+      }
       const timestamp = now();
       if (input.name !== undefined) cvVersion.name = input.name.trim();
-      if (input.content !== undefined) cvVersion.content = input.content.trim();
-      if (input.summary !== undefined) cvVersion.summary = input.summary?.trim() || null;
-      if (input.fileName !== undefined) cvVersion.fileName = input.fileName?.trim() || null;
-      if (input.storagePath !== undefined) {
-        cvVersion.storagePath = input.storagePath?.trim() || null;
-      }
-      if (input.mimeType !== undefined) cvVersion.mimeType = input.mimeType?.trim() || null;
-      if (input.skills !== undefined) {
-        cvVersion.skills = [...new Set(input.skills.map((skill) => skill.trim()).filter(Boolean))];
-      }
       if (input.isDefault !== undefined) {
         cvVersion.isDefault = input.isDefault;
         if (input.isDefault) {
@@ -689,9 +660,7 @@ export class LocalDataRepository implements DataRepository {
             });
         }
       }
-      if (!cvVersion.name || !cvVersion.content) {
-        throw new DataConflictError("A CV version requires a name and content.");
-      }
+      if (!cvVersion.name) throw new DataConflictError("A CV version requires a name.");
       cvVersion.updatedAt = timestamp;
       return cvVersion;
     });

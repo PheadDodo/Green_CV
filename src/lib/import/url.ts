@@ -546,7 +546,7 @@ export function createJobDescriptionFetcher(runtime: JobUrlFetchRuntime): JobDes
               headers: {
                 accept: "text/html, application/xhtml+xml, text/plain;q=0.9",
                 "accept-encoding": "identity",
-                "user-agent": "PathfinderJobImporter/1.0",
+                "user-agent": "GreenCVJobImporter/1.0",
               },
             }),
             controller.signal,

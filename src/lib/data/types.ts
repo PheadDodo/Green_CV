@@ -280,7 +280,7 @@ export interface CvVersionCreateInput {
   isDefault?: boolean;
 }
 
-export type CvVersionUpdateInput = Partial<CvVersionCreateInput>;
+export type CvVersionUpdateInput = Partial<Pick<CvVersionCreateInput, "name" | "isDefault">>;
 
 export interface ApplicationEventCreateInput {
   applicationId: string;

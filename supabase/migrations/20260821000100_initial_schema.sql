@@ -1,3 +1,4 @@
+-- Initial GreenCV schema (14-digit Supabase migration version).
 begin;
 
 create extension if not exists pgcrypto;
@@ -552,13 +553,26 @@ create policy "Users own their automation runs" on public.automation_runs
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
 
-revoke all on all tables in schema public from anon;
-grant usage on schema public to authenticated;
-grant select, insert, update, delete on
+revoke all on
   public.jobs,
   public.cv_versions,
   public.applications,
   public.application_events,
+  public.evaluations,
+  public.reminders,
+  public.import_batches,
+  public.automation_rules,
+  public.automation_runs
+from anon, authenticated;
+grant usage on schema public to authenticated;
+grant select, insert, delete on
+  public.jobs,
+  public.cv_versions
+to authenticated;
+grant update (name, is_default) on public.cv_versions to authenticated;
+grant select, insert on public.application_events to authenticated;
+grant select, insert, update, delete on
+  public.applications,
   public.evaluations,
   public.reminders,
   public.import_batches,
@@ -602,16 +616,6 @@ create policy "Users read their own CV files" on storage.objects
   );
 create policy "Users upload their own CV files" on storage.objects
   for insert to authenticated
-  with check (
-    bucket_id = 'cv-files'
-    and (storage.foldername(name))[1] = (select auth.uid())::text
-  );
-create policy "Users update their own CV files" on storage.objects
-  for update to authenticated
-  using (
-    bucket_id = 'cv-files'
-    and (storage.foldername(name))[1] = (select auth.uid())::text
-  )
   with check (
     bucket_id = 'cv-files'
     and (storage.foldername(name))[1] = (select auth.uid())::text

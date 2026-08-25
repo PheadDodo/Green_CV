@@ -8,7 +8,8 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
-const MAX_BYTES = 5 * 1024 * 1024;
+// Leave room for multipart overhead under Vercel's 4.5 MB request limit.
+const MAX_BYTES = 4 * 1024 * 1024;
 const manualSchema = z.object({ name: z.string().trim().min(2).max(120), content: z.string().trim().min(30).max(250_000), summary: z.string().trim().max(500).optional() });
 
 function skillsFrom(content: string) {
@@ -40,18 +41,27 @@ export async function POST(request: Request) {
     const name = z.string().trim().min(2).max(120).parse(data.get("name"));
     const summary = z.string().trim().max(500).catch("").parse(data.get("summary"));
     if (!(file instanceof File)) return NextResponse.json({ error: "Choose a CV file." }, { status: 400 });
-    if (file.size > MAX_BYTES) return NextResponse.json({ error: "CV files must be 5 MB or smaller." }, { status: 413 });
+    if (file.size > MAX_BYTES) return NextResponse.json({ error: "CV files must be 4 MB or smaller." }, { status: 413 });
     const buffer = Buffer.from(await file.arrayBuffer());
     const content = (await extract(file, buffer)).replace(/\0/g, "").trim();
     if (content.length < 30) return NextResponse.json({ error: "The file did not contain enough extractable text. Paste its text manually instead." }, { status: 422 });
     let storagePath: string | null = null;
+    let storageClient: Awaited<ReturnType<typeof createClient>> | null = null;
     if (isSupabaseConfigured()) {
       storagePath = `${user.id}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const client = await createClient();
-      const { error } = await client.storage.from("cv-files").upload(storagePath, buffer, { contentType: file.type || "application/octet-stream", upsert: false });
+      storageClient = await createClient();
+      const { error } = await storageClient.storage.from("cv-files").upload(storagePath, buffer, { contentType: file.type || "application/octet-stream", upsert: false });
       if (error) throw error;
     }
-    const cv = await repository.createCvVersion({ name, summary: summary || null, content, fileName: file.name, mimeType: file.type || null, storagePath, skills: skillsFrom(content) });
+    let cv;
+    try {
+      cv = await repository.createCvVersion({ name, summary: summary || null, content, fileName: file.name, mimeType: file.type || null, storagePath, skills: skillsFrom(content) });
+    } catch (error) {
+      if (storageClient && storagePath) {
+        await storageClient.storage.from("cv-files").remove([storagePath]);
+      }
+      throw error;
+    }
     return NextResponse.json({ cv }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create CV version." }, { status: 400 });
