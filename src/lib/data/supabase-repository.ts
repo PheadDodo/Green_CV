@@ -621,6 +621,18 @@ export class SupabaseDataRepository implements DataRepository {
     return toCvVersion(data);
   }
 
+  async deleteCvVersion(id: string): Promise<void> {
+    const { data, error } = await this.client
+      .from("cv_versions")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", this.userId)
+      .select("id")
+      .maybeSingle();
+    throwQueryError(error);
+    if (!data) throw new DataNotFoundError("CV version", id);
+  }
+
   async listEvaluations(jobId?: string): Promise<Evaluation[]> {
     let query = this.client
       .from("evaluations")

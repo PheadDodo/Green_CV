@@ -6,7 +6,9 @@ import { useEffect, useState, useTransition } from "react";
 import type { CvVersion } from "@/lib/data/types";
 import { Button } from "./ui";
 
-export function AddRoleDialog({ cvs = [], label = "Add role" }: { cvs?: CvVersion[]; label?: string }) {
+type CvChoice = Pick<CvVersion, "id" | "name" | "isDefault">;
+
+export function AddRoleDialog({ cvs = [], label = "Add role" }: { cvs?: CvChoice[]; label?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
@@ -53,7 +55,7 @@ export function AddRoleDialog({ cvs = [], label = "Add role" }: { cvs?: CvVersio
           <div className="field"><label htmlFor="employmentType">Employment</label><select id="employmentType" name="employmentType" defaultValue="full_time"><option value="full_time">Full-time</option><option value="part_time">Part-time</option><option value="contract">Contract</option><option value="internship">Internship</option></select></div>
           <div className="field fieldFull"><label htmlFor="description">Job description snapshot</label><textarea id="description" name="description" required minLength={20} placeholder="Paste the complete job description…" /><small>This snapshot becomes the authoritative source for future evaluations.</small></div>
           <div className="field"><label htmlFor="status">Starting status</label><select id="status" name="status" defaultValue="saved"><option value="saved">Saved</option><option value="applied">Applied</option><option value="screening">Screening</option></select></div>
-          <div className="field"><label htmlFor="cvVersionId">Attach CV version</label><select id="cvVersionId" name="cvVersionId" defaultValue=""><option value="">Attach later</option>{cvs.map(cv => <option key={cv.id} value={cv.id}>{cv.name}</option>)}</select></div>
+          <div className="field"><label htmlFor="cvVersionId">Attach CV version</label><select id="cvVersionId" name="cvVersionId" defaultValue={cvs.find(cv => cv.isDefault)?.id ?? ""}><option value="">Attach later</option>{cvs.map(cv => <option key={cv.id} value={cv.id}>{cv.name}</option>)}</select></div>
         </div>
         <div className="dialogActions"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={pending}>{pending ? "Opening…" : "Save role"}</Button></div>
       </form>

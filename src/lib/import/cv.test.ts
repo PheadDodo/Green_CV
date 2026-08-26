@@ -1,10 +1,48 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CvExtractionError,
   extractCvText,
   type CvDocumentExtractor,
 } from "./cv";
+
+function fakeDocxArchive(uncompressedSize = 128): Uint8Array {
+  const fileName = new TextEncoder().encode("word/document.xml");
+  const local = new Uint8Array(30 + fileName.length + 1);
+  const localView = new DataView(local.buffer);
+  localView.setUint32(0, 0x04034b50, true);
+  localView.setUint16(4, 20, true);
+  localView.setUint16(8, 8, true);
+  localView.setUint32(18, 1, true);
+  localView.setUint32(22, uncompressedSize, true);
+  localView.setUint16(26, fileName.length, true);
+  local.set(fileName, 30);
+
+  const central = new Uint8Array(46 + fileName.length);
+  const centralView = new DataView(central.buffer);
+  centralView.setUint32(0, 0x02014b50, true);
+  centralView.setUint16(4, 20, true);
+  centralView.setUint16(6, 20, true);
+  centralView.setUint16(10, 8, true);
+  centralView.setUint32(20, 1, true);
+  centralView.setUint32(24, uncompressedSize, true);
+  centralView.setUint16(28, fileName.length, true);
+  central.set(fileName, 46);
+
+  const eocd = new Uint8Array(22);
+  const eocdView = new DataView(eocd.buffer);
+  eocdView.setUint32(0, 0x06054b50, true);
+  eocdView.setUint16(8, 1, true);
+  eocdView.setUint16(10, 1, true);
+  eocdView.setUint32(12, central.length, true);
+  eocdView.setUint32(16, local.length, true);
+
+  const archive = new Uint8Array(local.length + central.length + eocd.length);
+  archive.set(local, 0);
+  archive.set(central, local.length);
+  archive.set(eocd, local.length + central.length);
+  return archive;
+}
 
 describe("extractCvText", () => {
   it("extracts UTF-8 TXT and Markdown directly and normalizes line endings", async () => {
@@ -61,7 +99,7 @@ describe("extractCvText", () => {
   });
 
   it("wraps package failures and rejects empty extraction results", async () => {
-    const docx = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+    const docx = fakeDocxArchive();
     await expect(
       extractCvText(
         { fileName: "resume.docx", data: docx },
@@ -82,5 +120,17 @@ describe("extractCvText", () => {
         },
       ),
     ).rejects.toMatchObject({ code: "extraction_failed", cause: packageError });
+  });
+
+  it("rejects a DOCX whose declared expanded size exceeds the safety limit", async () => {
+    const extractor = vi.fn(async () => "should not run");
+
+    await expect(
+      extractCvText(
+        { fileName: "oversized.docx", data: fakeDocxArchive(40 * 1024 * 1024) },
+        { extractors: { docx: extractor } },
+      ),
+    ).rejects.toMatchObject({ code: "invalid_document", format: "docx" });
+    expect(extractor).not.toHaveBeenCalled();
   });
 });

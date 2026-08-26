@@ -67,6 +67,10 @@ export interface ExtractedCvText {
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_CHARACTERS = 2_000_000;
+const MAX_DOCX_ENTRIES = 1_000;
+const MAX_DOCX_EXPANDED_BYTES = 32 * 1024 * 1024;
+const ZIP_CENTRAL_HEADER = 0x02014b50;
+const ZIP_END_OF_CENTRAL_DIRECTORY = 0x06054b50;
 
 const FORMAT_MIME: Readonly<Record<CvFormat, string>> = {
   txt: "text/plain",
@@ -157,6 +161,78 @@ function toBytes(data: CvFileInput["data"]): Uint8Array {
   return new Uint8Array(data.slice(0));
 }
 
+function invalidDocx(fileName: string, message: string): never {
+  throw new CvExtractionError("invalid_document", message, { format: "docx", fileName });
+}
+
+function findZipDirectoryEnd(view: DataView): number | null {
+  const minimumOffset = Math.max(0, view.byteLength - 22 - 65_535);
+  for (let offset = view.byteLength - 22; offset >= minimumOffset; offset -= 1) {
+    if (view.getUint32(offset, true) !== ZIP_END_OF_CENTRAL_DIRECTORY) continue;
+    const commentLength = view.getUint16(offset + 20, true);
+    if (offset + 22 + commentLength === view.byteLength) return offset;
+  }
+  return null;
+}
+
+function assertSafeDocxArchive(bytes: Uint8Array, fileName: string): void {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const directoryEnd = findZipDirectoryEnd(view);
+  if (directoryEnd === null) invalidDocx(fileName, "DOCX ZIP directory is missing");
+
+  const diskNumber = view.getUint16(directoryEnd + 4, true);
+  const directoryDisk = view.getUint16(directoryEnd + 6, true);
+  const entriesOnDisk = view.getUint16(directoryEnd + 8, true);
+  const totalEntries = view.getUint16(directoryEnd + 10, true);
+  const directorySize = view.getUint32(directoryEnd + 12, true);
+  const directoryOffset = view.getUint32(directoryEnd + 16, true);
+  if (diskNumber !== 0 || directoryDisk !== 0 || entriesOnDisk !== totalEntries) {
+    invalidDocx(fileName, "Multi-disk DOCX archives are not supported");
+  }
+  if (totalEntries === 0 || totalEntries > MAX_DOCX_ENTRIES) {
+    invalidDocx(fileName, "DOCX archive has an unsafe entry count");
+  }
+  if (directorySize === 0xffffffff || directoryOffset === 0xffffffff) {
+    invalidDocx(fileName, "ZIP64 DOCX archives are not supported");
+  }
+  const directoryLimit = directoryOffset + directorySize;
+  if (directoryOffset > directoryEnd || directoryLimit > directoryEnd) {
+    invalidDocx(fileName, "DOCX ZIP directory is invalid");
+  }
+
+  let cursor = directoryOffset;
+  let expandedBytes = 0;
+  let hasDocumentXml = false;
+  for (let entry = 0; entry < totalEntries; entry += 1) {
+    if (cursor + 46 > directoryLimit || view.getUint32(cursor, true) !== ZIP_CENTRAL_HEADER) {
+      invalidDocx(fileName, "DOCX ZIP entry is invalid");
+    }
+    const flags = view.getUint16(cursor + 8, true);
+    const compressedSize = view.getUint32(cursor + 20, true);
+    const uncompressedSize = view.getUint32(cursor + 24, true);
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    if ((flags & 0x1) !== 0) invalidDocx(fileName, "Encrypted DOCX archives are not supported");
+    if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) {
+      invalidDocx(fileName, "ZIP64 DOCX entries are not supported");
+    }
+
+    expandedBytes += uncompressedSize;
+    if (!Number.isSafeInteger(expandedBytes) || expandedBytes > MAX_DOCX_EXPANDED_BYTES) {
+      invalidDocx(fileName, "DOCX expanded content exceeds the safety limit");
+    }
+    const nextEntry = cursor + 46 + nameLength + extraLength + commentLength;
+    if (nextEntry > directoryLimit) invalidDocx(fileName, "DOCX ZIP entry is truncated");
+    const entryName = new TextDecoder("utf-8").decode(
+      bytes.subarray(cursor + 46, cursor + 46 + nameLength),
+    );
+    if (entryName === "word/document.xml") hasDocumentXml = true;
+    cursor = nextEntry;
+  }
+  if (!hasDocumentXml) invalidDocx(fileName, "DOCX document content is missing");
+}
+
 function assertDocumentSignature(format: CvFormat, bytes: Uint8Array, fileName: string): void {
   if (format === "pdf") {
     const signature = new TextDecoder("ascii").decode(bytes.slice(0, 5));
@@ -174,6 +250,7 @@ function assertDocumentSignature(format: CvFormat, bytes: Uint8Array, fileName: 
     if (!isZip) {
       throw new CvExtractionError("invalid_document", "DOCX ZIP signature is missing", { format, fileName });
     }
+    assertSafeDocxArchive(bytes, fileName);
   }
 }
 

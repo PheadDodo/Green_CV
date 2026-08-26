@@ -6,9 +6,11 @@ import { useState } from "react";
 import type { CvVersion } from "@/lib/data/types";
 import { Button } from "./ui";
 
-export function JobWorkflow({ applicationId, currentCvId, cvs, hasEvaluation }: { applicationId: string; currentCvId: string | null; cvs: CvVersion[]; hasEvaluation: boolean }) {
+type CvChoice = Pick<CvVersion, "id" | "name" | "isDefault">;
+
+export function JobWorkflow({ applicationId, currentCvId, cvs, hasEvaluation }: { applicationId: string; currentCvId: string | null; cvs: CvChoice[]; hasEvaluation: boolean }) {
   const router = useRouter();
-  const [cvId, setCvId] = useState(currentCvId ?? "");
+  const [cvId, setCvId] = useState(currentCvId ?? cvs.find(cv => cv.isDefault)?.id ?? "");
   const [pending, setPending] = useState<"attach" | "evaluate" | null>(null);
   const [error, setError] = useState("");
 

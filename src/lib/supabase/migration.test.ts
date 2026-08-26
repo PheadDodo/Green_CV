@@ -30,3 +30,35 @@ describe("initial Supabase migration", () => {
     expect(sql).not.toContain('create policy "Users update their own CV files"');
   });
 });
+
+describe("CV artifact storage hardening migration", () => {
+  it("matches the application upload limit and only accepts opaque artifact paths", async () => {
+    const sql = await readFile(
+      path.join(process.cwd(), "supabase", "migrations", "20260826000100_harden_cv_artifacts.sql"),
+      "utf8",
+    );
+
+    expect(sql).toContain("file_size_limit = 4194304");
+    expect(sql).toContain("cardinality(storage.foldername(name)) = 2");
+    expect(sql).toContain("cardinality(storage.foldername(name)) = 1");
+    expect(sql).toContain("storage.filename(name) in ('original.pdf', 'original.docx', 'original.md', 'original.txt')");
+    expect(sql).toContain("split_part(storage_path, '/', 1) = user_id::text");
+    expect(sql).toContain('drop policy if exists "Users update their own CV files"');
+    expect(sql).not.toContain('create policy "Users update their own CV files"');
+  });
+});
+
+describe("CV selection migration", () => {
+  it("selects the first CV for each user without promoting later replacements", async () => {
+    const sql = await readFile(
+      path.join(process.cwd(), "supabase", "migrations", "20260826000200_cv_selection.sql"),
+      "utf8",
+    );
+
+    expect(sql).toContain("partition by user_id");
+    expect(sql).toContain("if tg_op = 'INSERT'");
+    expect(sql).toContain("not exists (");
+    expect(sql).toContain("from public.cv_versions as existing");
+    expect(sql).toContain("existing.user_id = new.user_id");
+  });
+});

@@ -190,11 +190,32 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 /* CVs, imports, automation */
 .splitGrid { display: grid; grid-template-columns: minmax(0,1fr) minmax(300px,.75fr); gap: 15px; }
 .cvList, .reminderList, .runList { display: grid; gap: 9px; }
-.cvCard { display: grid; grid-template-columns: 40px minmax(0,1fr) auto; gap: 11px; align-items: center; padding: 13px; border: 1px solid var(--line); border-radius: 12px; }
+.cvCard { display: grid; grid-template-columns: minmax(150px,1fr) auto; gap: 13px; align-items: center; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
 .fileIcon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; color: var(--green); background: var(--mint); }
-.cvCard b, .cvCard span { display: block; }
-.cvCard b { font-size: 11px; margin-bottom: 3px; }
-.cvCard span { color: var(--muted); font-size: 9px; }
+.cvCardDetails { min-width: 0; }
+.cvCardDetails > b, .cvCardDetails > span { display: block; }
+.cvCardDetails > b { font-size: 11px; margin-bottom: 4px; }
+.cvCardDetails > span:not(.badge) { color: var(--muted); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cvCardDetails > .badge { display: inline-flex; margin-top: 8px; }
+.cvCardActions { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
+.cvCardActions .button { min-height: 34px; padding: 8px 10px; font-size: 10px; }
+.cvLibraryDialog { width: min(720px,100%); }
+.cvPdfDialog { width: min(1000px,100%); }
+.cvPdfFrame { display: block; width: 100%; height: min(72vh,820px); min-height: 480px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); }
+.atsSummary { display: flex; align-items: baseline; gap: 10px; padding: 17px; margin-bottom: 13px; border-radius: 12px; background: var(--mint); color: var(--green-dark); }
+.atsSummary strong { font: 800 28px "Manrope",sans-serif; letter-spacing: -.04em; }
+.atsSummary span { font-size: 11px; font-weight: 800; }
+.atsChecks { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.atsCheck { padding: 11px 12px; border: 1px solid var(--line); border-left-width: 4px; border-radius: 10px; }
+.atsCheck-pass { border-left-color: var(--green); }
+.atsCheck-warning { border-left-color: var(--yellow); }
+.atsCheck-fail { border-left-color: var(--red); }
+.atsCheck > div { display: flex; justify-content: space-between; gap: 12px; }
+.atsCheck b { font-size: 10px; }
+.atsCheck span { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.atsCheck p, .atsDisclaimer { color: var(--muted); font-size: 9px; line-height: 1.55; }
+.atsCheck p { margin: 5px 0 0; }
+.atsDisclaimer { margin: 13px 0 0; }
 .dropzone { display: grid; place-items: center; text-align: center; min-height: 230px; border: 1.5px dashed #aab8b2; background: #f9fbf9; border-radius: 13px; padding: 20px; }
 .dropzone svg { color: var(--green); margin-bottom: 10px; }
 .dropzone h3 { font-size: 12px; margin-bottom: 5px; }
@@ -278,6 +299,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .formGrid, .factsGrid, .evidenceGrid { grid-template-columns: 1fr; }
   .detailTop { grid-template-columns: 1fr; }
   .detailScore { text-align: left; }
+  .cvCard { grid-template-columns: 1fr; }
+  .cvCardActions { justify-content: flex-start; }
+  .cvPdfFrame { min-height: 380px; }
   .authPage { grid-template-columns: 1fr; }
   .authStory { min-height: 260px; padding: 28px; }
   .authStory h1 { font-size: 38px; margin: 50px 0 13px; }

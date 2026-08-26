@@ -666,6 +666,26 @@ export class LocalDataRepository implements DataRepository {
     });
   }
 
+  deleteCvVersion(id: string): Promise<void> {
+    return this.mutate((document) => {
+      const cvVersion = requireOwned(document.cvVersions, id, this.userId, "CV version");
+      const timestamp = now();
+      document.applications
+        .filter(application => application.userId === this.userId && application.cvVersionId === id)
+        .forEach(application => {
+          application.cvVersionId = null;
+          application.updatedAt = timestamp;
+        });
+      document.evaluations
+        .filter(evaluation => evaluation.userId === this.userId && evaluation.cvVersionId === id)
+        .forEach(evaluation => {
+          evaluation.cvVersionId = null;
+          evaluation.updatedAt = timestamp;
+        });
+      document.cvVersions.splice(document.cvVersions.indexOf(cvVersion), 1);
+    });
+  }
+
   async listEvaluations(jobId?: string): Promise<Evaluation[]> {
     const document = await this.read();
     return clone(

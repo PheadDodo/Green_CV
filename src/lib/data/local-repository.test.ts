@@ -56,4 +56,37 @@ describe("LocalDataRepository", () => {
       .rejects.toThrow(/immutable/i);
     expect((await repository.getCvVersion(cv.id))?.content).toBe(cv.content);
   });
+
+  it("deletes an owned CV and detaches preserved application history", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
+    temporaryDirectories.push(directory);
+    const repository = new LocalDataRepository({ filePath: path.join(directory, "store.json") });
+    const evaluation = (await repository.listEvaluations()).find(item => item.cvVersionId !== null);
+    expect(evaluation).toBeTruthy();
+    const cvId = evaluation!.cvVersionId!;
+    const application = await repository.getApplication(evaluation!.applicationId);
+    expect(application?.cvVersionId).toBe(cvId);
+
+    await repository.deleteCvVersion(cvId);
+
+    expect(await repository.getCvVersion(cvId)).toBeNull();
+    const detachedApplication = await repository.getApplication(application!.id);
+    const detachedEvaluation = await repository.getEvaluation(evaluation!.id);
+    expect(detachedApplication?.cvVersionId).toBeNull();
+    expect(detachedApplication?.updatedAt).not.toBe(application!.updatedAt);
+    expect(detachedEvaluation?.cvVersionId).toBeNull();
+    expect(detachedEvaluation?.updatedAt).not.toBe(evaluation!.updatedAt);
+  });
+
+  it("does not delete a CV owned by another user", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
+    temporaryDirectories.push(directory);
+    const filePath = path.join(directory, "store.json");
+    const owner = new LocalDataRepository({ filePath, userId: "owner-a" });
+    const otherUser = new LocalDataRepository({ filePath, userId: "owner-b" });
+    const foreignCv = await otherUser.createCvVersion({ name: "Private CV", content: "Private evidence" });
+
+    await expect(owner.deleteCvVersion(foreignCv.id)).rejects.toThrow(/not found/i);
+    expect(await otherUser.getCvVersion(foreignCv.id)).toEqual(foreignCv);
+  });
 });

@@ -64,6 +64,7 @@ export interface DataRepository {
   getCvVersion(id: string): Promise<CvVersion | null>;
   createCvVersion(input: CvVersionCreateInput): Promise<CvVersion>;
   updateCvVersion(id: string, input: CvVersionUpdateInput): Promise<CvVersion>;
+  deleteCvVersion(id: string): Promise<void>;
 
   listEvaluations(jobId?: string): Promise<Evaluation[]>;
   getEvaluation(id: string): Promise<Evaluation | null>;

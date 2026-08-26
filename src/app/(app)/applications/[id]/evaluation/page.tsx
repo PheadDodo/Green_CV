@@ -4,20 +4,26 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { getDataRepository } from "@/lib/data";
+import { evaluationCvLabel } from "@/lib/evaluation-history";
 
 export default async function EvaluationPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ version?: string }> }) {
   const [{ id }, query, user] = await Promise.all([params, searchParams, requireUser()]);
   const repository = await getDataRepository({ userId: user.id });
   const application = await repository.getApplication(id);
   if (!application) notFound();
-  const evaluations = (await repository.listEvaluations(application.jobId)).filter(item => item.applicationId === application.id).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+  const [jobEvaluations, cvs] = await Promise.all([
+    repository.listEvaluations(application.jobId),
+    repository.listCvVersions(),
+  ]);
+  const evaluations = jobEvaluations.filter(item => item.applicationId === application.id).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
   const selected = evaluations.find(item => item.id === query.version) ?? evaluations[0];
   if (!selected) return <main className="page"><Link href={`/applications/${id}`} className="button button-ghost"><ArrowLeft size={14} /> Role</Link><section className="emptyState"><Sparkles /><h2>No evaluation yet</h2><p>Attach a CV from the role page and run an evidence analysis first.</p></section></main>;
   const tone = selected.recommendation === "apply" ? "green" : selected.recommendation === "consider" ? "amber" : "red";
+  const cvLabel = evaluationCvLabel(selected.cvVersionId, cvs);
   return <main className="page">
     <Link href={`/applications/${id}`} className="button button-ghost" style={{ marginBottom: 18 }}><ArrowLeft size={14} /> Role detail</Link>
     <section className="panel evaluationHero"><div className="panelBody" style={{ paddingTop: 28 }}>
-      <div className="detailTop"><div><Badge tone={tone}>{selected.recommendation ?? selected.status}</Badge><h1>{application.job.title}</h1><p>{application.job.company} · Compared with {application.cvVersion?.name ?? "unavailable CV"}</p></div><div className="detailScore"><strong>{selected.overallScore ?? "—"}</strong><span>Evidence fit / 100</span></div></div>
+      <div className="detailTop"><div><Badge tone={tone}>{selected.recommendation ?? selected.status}</Badge><h1>{application.job.title}</h1><p>{application.job.company} · Compared with {cvLabel}</p></div><div className="detailScore"><strong>{selected.overallScore ?? "—"}</strong><span>Evidence fit / 100</span></div></div>
       <div className="factsGrid"><div className="fact"><span>Recommendation</span><b>{selected.recommendation ?? "Pending"}</b></div><div className="fact"><span>Evaluator</span><b>{selected.model ?? "—"}</b></div><div className="fact"><span>Version</span><b>Prompt {selected.promptVersion ?? "—"}</b></div></div>
       <p style={{ fontSize: 12, lineHeight: 1.7, maxWidth: 850 }}>{selected.summary}</p>
       <div className="evidenceGrid"><section><h2 className="sectionTitle">Evidence-backed matches</h2>{selected.evidence.length ? selected.evidence.map((item,index) => <div className="evidenceItem" key={`${item.requirement}-${index}`}><span className="evidenceIcon"><Check size={10} /></span><span><b>{item.requirement}</b><br /><span style={{ color: "#697471" }}>“{item.cvEvidence}”</span></span></div>) : selected.strengths.map(value => <div className="evidenceItem" key={value}><span className="evidenceIcon"><Check size={10} /></span><span>{value}</span></div>)}</section><section><h2 className="sectionTitle">Honest gaps</h2>{selected.gaps.map(value => <div className="evidenceItem" key={value}><span className="evidenceIcon gap"><AlertCircle size={10} /></span><span>{value}</span></div>)}</section></div>

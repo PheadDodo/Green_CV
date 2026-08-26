@@ -31,3 +31,21 @@ append-only. Owner-initiated deletion remains available as a privacy operation.
 - Funnel: distinct applications reaching each stage in the selected period.
 
 These definitions live in tested domain code, not in presentation components.
+
+## CV library artifacts
+
+- Every new upload is validated and converted to canonical Markdown before it is
+  saved as the immutable `cv_versions.content` used by evaluation.
+- `CV.md` is generated from that private canonical content on download, avoiding a
+  duplicate file and keeping local and PostgreSQL-backed environments consistent.
+- Original files use opaque private paths. Only authenticated, owner-scoped API
+  routes can read them; storage paths never reach the browser.
+- PDF previews use a short-lived browser Blob URL. ATS scans are deterministic
+  compatibility guidance and do not claim to reproduce an employer's ATS score.
+- The first CV is selected automatically. Selecting another makes it the default
+  choice in new-application and unattached-role CV pickers; it never rewrites an
+  existing attachment.
+- Deleting a CV first removes its private original file, then deletes its canonical
+  content and detaches it from applications and evaluations. Historical evaluation
+  results, including quoted CV evidence, and application activity remain as an
+  audit trail; deleting the selected CV does not silently promote another version.
