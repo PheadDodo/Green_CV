@@ -15,12 +15,18 @@ export type MetricApplication = {
   events: MetricEvent[];
 };
 
+export type DashboardStatusDatum = {
+  status: "Saved" | "Applied" | "Screening" | "Interview" | "Offer" | "Closed";
+  value: number;
+};
+
 export type DashboardMetrics = {
   activeApplications: number;
   responseRate: number;
   interviews: number;
   averageFit: number;
   funnel: Array<{ stage: "Discovered" | "Applied" | "Responded" | "Interview" | "Offer"; value: number }>;
+  statusBreakdown: DashboardStatusDatum[];
 };
 
 export function calculatePipelineSummary(applications: Array<{ status: string }>) {
@@ -31,6 +37,7 @@ export function calculatePipelineSummary(applications: Array<{ status: string }>
 }
 
 const RESPONSE_EVENTS = new Set(["response_received", "screening_scheduled", "interview_scheduled"]);
+const CLOSED_STATUSES = new Set(["rejected", "withdrawn", "archived"]);
 
 function inRange(value: string | null | undefined, from: number, to: number) {
   if (!value) return false;
@@ -81,6 +88,14 @@ export function calculateDashboardMetrics(
       { stage: "Responded", value: applications.filter(application => reached(application, "responded")).length },
       { stage: "Interview", value: applications.filter(application => reached(application, "interview")).length },
       { stage: "Offer", value: applications.filter(application => reached(application, "offer")).length }
+    ],
+    statusBreakdown: [
+      { status: "Saved", value: applications.filter(application => application.status === "saved").length },
+      { status: "Applied", value: applications.filter(application => application.status === "applied").length },
+      { status: "Screening", value: applications.filter(application => application.status === "screening").length },
+      { status: "Interview", value: applications.filter(application => application.status === "interview").length },
+      { status: "Offer", value: applications.filter(application => application.status === "offer").length },
+      { status: "Closed", value: applications.filter(application => CLOSED_STATUSES.has(application.status)).length },
     ]
   };
 }

@@ -45,6 +45,28 @@ describe("calculateDashboardMetrics", () => {
     ]);
   });
 
+  it("counts every application once in the current status breakdown", () => {
+    const result = calculateDashboardMetrics([
+      application({ id: "saved", status: "saved" }),
+      application({ id: "applied", status: "applied" }),
+      application({ id: "screening", status: "screening" }),
+      application({ id: "interview", status: "interview" }),
+      application({ id: "offer", status: "offer" }),
+      application({ id: "rejected", status: "rejected" }),
+      application({ id: "withdrawn", status: "withdrawn" }),
+      application({ id: "archived", status: "archived" }),
+    ], { now });
+
+    expect(result.statusBreakdown).toEqual([
+      { status: "Saved", value: 1 },
+      { status: "Applied", value: 1 },
+      { status: "Screening", value: 1 },
+      { status: "Interview", value: 1 },
+      { status: "Offer", value: 1 },
+      { status: "Closed", value: 3 },
+    ]);
+  });
+
   it("returns meaningful zeroes for an empty workspace", () => {
     expect(calculateDashboardMetrics([], { now })).toEqual({
       activeApplications: 0,
@@ -57,6 +79,14 @@ describe("calculateDashboardMetrics", () => {
         { stage: "Responded", value: 0 },
         { stage: "Interview", value: 0 },
         { stage: "Offer", value: 0 }
+      ],
+      statusBreakdown: [
+        { status: "Saved", value: 0 },
+        { status: "Applied", value: 0 },
+        { status: "Screening", value: 0 },
+        { status: "Interview", value: 0 },
+        { status: "Offer", value: 0 },
+        { status: "Closed", value: 0 },
       ]
     });
   });

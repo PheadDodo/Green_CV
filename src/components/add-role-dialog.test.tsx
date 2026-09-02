@@ -22,4 +22,17 @@ describe("AddRoleDialog", () => {
 
     expect((screen.getByLabelText("Attach CV version") as HTMLSelectElement).value).toBe("cv-2");
   });
+
+  it("defaults to attaching later when no CV is selected", () => {
+    render(<AddRoleDialog cvs={[
+      { id: "cv-1", name: "General CV", isDefault: false },
+      { id: "cv-2", name: "ML CV", isDefault: false },
+    ]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add role" }));
+
+    const cvPicker = screen.getByLabelText("Attach CV version") as HTMLSelectElement;
+    expect(cvPicker.value).toBe("");
+    expect(cvPicker.selectedOptions[0]?.textContent).toBe("Attach later");
+  });
 });

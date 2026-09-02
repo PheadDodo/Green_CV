@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight, BriefcaseBusiness, CalendarCheck2, MessageCircleReply, Sparkles, Target } from "lucide-react";
 import { AddRoleDialog } from "@/components/add-role-dialog";
+import { ApplicationStatusChart } from "@/components/application-status-chart";
 import { FunnelChart } from "@/components/funnel-chart";
 import { Badge, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
@@ -35,6 +36,7 @@ export default async function DashboardPage() {
     <div className="dashboardGrid">
       <section>
         <article className="panel"><div className="panelHeader"><div><h2>Application funnel</h2><p>Distinct applications reaching each stage in the last 30 days</p></div><Badge tone="green">Live data</Badge></div><div className="panelBody"><FunnelChart data={metrics.funnel} /></div></article>
+        <article className="panel statusPanel"><div className="panelHeader"><div><h2>Current application status</h2><p>Where every role in your pipeline sits now</p></div><Badge tone="blue">Current</Badge></div><div className="panelBody"><ApplicationStatusChart data={metrics.statusBreakdown} /></div></article>
         <article className="panel activityPanel"><div className="panelHeader"><div><h2>Recent activity</h2><p>Your append-only job-search timeline</p></div><Link className="button button-ghost" href="/applications">View pipeline</Link></div><div className="activityList">
           {activity.map(({ application, event }) => <div className="activityItem" key={event.id}><span className="companyLogo">{application.job.company.slice(0,1)}</span><div><b>{event.title}</b><span>{application.job.company} · {application.job.title}</span></div><Badge tone={event.toStatus === "interview" ? "green" : "neutral"}>{relativeDate(event.occurredAt)}</Badge></div>)}
           {!activity.length && <p className="notice">Add your first role to start the timeline.</p>}

@@ -4,7 +4,8 @@
 
 The prototype converged on a hybrid information architecture:
 
-- Design A became `/dashboard`: metrics, funnel, activity, and the best next move.
+- Design A became `/dashboard`: metrics, funnel, current-status chart, activity,
+  and the best next move.
 - Design B became `/applications`: the visual application pipeline.
 - Design C became `/applications/:id/evaluation`: evidence-first CV/role analysis.
 
@@ -29,6 +30,8 @@ append-only. Owner-initiated deletion remains available as a privacy operation.
 - Interviews: distinct applications reaching Interview in the selected period.
 - Average fit: latest successful evaluation for each active application.
 - Funnel: distinct applications reaching each stage in the selected period.
+- Current status chart: each application is counted once by its status now;
+  Rejected, Withdrawn, and Archived are grouped as Closed.
 
 These definitions live in tested domain code, not in presentation components.
 
@@ -45,6 +48,8 @@ These definitions live in tested domain code, not in presentation components.
 - The first CV is selected automatically. Selecting another makes it the default
   choice in new-application and unattached-role CV pickers; it never rewrites an
   existing attachment.
+- Unselecting the default leaves no CV selected and does not promote another
+  version. Future CV pickers stay blank until a CV is selected again.
 - Deleting a CV first removes its private original file, then deletes its canonical
   content and detaches it from applications and evaluations. Historical evaluation
   results, including quoted CV evidence, and application activity remain as an

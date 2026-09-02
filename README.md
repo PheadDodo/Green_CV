@@ -26,19 +26,19 @@ demo identity and its private files are not exposed to other devices on your LAN
 1. Add a role manually, from a public URL, or with a validated CSV import.
 2. Read the structured job brief, then expand the preserved source description.
 3. Import or paste an immutable CV version, preview private PDFs, run the ATS
-   compatibility scan, download its canonical `CV.md`, and select the default CV
-   used for future application choices.
+   compatibility scan, download its canonical `CV.md`, and select or unselect the
+   default CV used for future application choices.
 4. Run an evidence-constrained fit evaluation and review honest gaps and safe edits.
 5. Record replies, interviews, follow-ups, and stage changes. Closed roles remain
    searchable and can be reopened if a status was changed accidentally.
 
 Main routes:
 
-- `/dashboard` — metrics, funnel, reminders, activity, and next actions
+- `/dashboard` — metrics, funnel, current-status chart, reminders, activity, and next actions
 - `/applications` — searchable open and closed application pipeline
 - `/applications/:id` — job brief, source description, CV, and interaction history
 - `/applications/:id/evaluation` — versioned fit evidence, gaps, and safe CV edits
-- `/cvs` — upload, select, privately preview, ATS-check, download, or delete CVs
+- `/cvs` — upload, select or unselect, privately preview, ATS-check, download, or delete CVs
 - `/imports` — CSV import and SSRF-safe public job URL previews
 - `/settings/automation` — persisted rules, run history, retries, and cancellation
 

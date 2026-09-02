@@ -25,4 +25,20 @@ describe("JobWorkflow", () => {
 
     expect((screen.getByLabelText("CV version") as HTMLSelectElement).value).toBe("cv-2");
   });
+
+  it("leaves the picker blank when no CV is selected or attached", () => {
+    render(<JobWorkflow
+      applicationId="application-1"
+      currentCvId={null}
+      cvs={[
+        { id: "cv-1", name: "General CV", isDefault: false },
+        { id: "cv-2", name: "ML CV", isDefault: false },
+      ]}
+      hasEvaluation={false}
+    />);
+
+    const cvPicker = screen.getByLabelText("CV version") as HTMLSelectElement;
+    expect(cvPicker.value).toBe("");
+    expect(cvPicker.selectedOptions[0]?.textContent).toMatch(/^Choose a CV/);
+  });
 });

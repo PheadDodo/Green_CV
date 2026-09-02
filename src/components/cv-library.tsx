@@ -24,7 +24,7 @@ export function CvLibrary({ cvs }: { cvs: CvLibraryItemDto[] }) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [selectingCvId, setSelectingCvId] = useState<string | null>(null);
+  const [updatingSelectionCvId, setUpdatingSelectionCvId] = useState<string | null>(null);
   const [deletingCvId, setDeletingCvId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [selectedCvId, setSelectedCvId] = useState<string | null>(
@@ -92,22 +92,23 @@ export function CvLibrary({ cvs }: { cvs: CvLibraryItemDto[] }) {
     }
   }
 
-  async function selectCv(cv: CvLibraryItemDto) {
-    setSelectingCvId(cv.id);
+  async function updateCvSelection(cv: CvLibraryItemDto, isDefault: boolean) {
+    const fallback = isDefault ? "Could not select this CV." : "Could not unselect this CV.";
+    setUpdatingSelectionCvId(cv.id);
     setActionError("");
     try {
       const response = await fetch(`/api/cvs/${encodeURIComponent(cv.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isDefault: true }),
+        body: JSON.stringify({ isDefault }),
       });
-      if (!response.ok) throw new Error("Could not select this CV.");
-      setSelectedCvId(cv.id);
+      if (!response.ok) throw new Error(fallback);
+      setSelectedCvId(isDefault ? cv.id : null);
       router.refresh();
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Could not select this CV.");
+      setActionError(error instanceof Error ? error.message : fallback);
     } finally {
-      setSelectingCvId(null);
+      setUpdatingSelectionCvId(null);
     }
   }
 
@@ -149,14 +150,22 @@ export function CvLibrary({ cvs }: { cvs: CvLibraryItemDto[] }) {
           {selectedCvId === cv.id && <span className="badge badge-green">Selected</span>}
         </div>
         <div className="cvCardActions">
-          {selectedCvId !== cv.id && <button
+          {selectedCvId === cv.id ? <button
+            type="button"
+            className="button button-ghost"
+            aria-label={`Unselect CV for ${cv.name}`}
+            disabled={updatingSelectionCvId !== null}
+            onClick={() => void updateCvSelection(cv, false)}
+          >
+            {updatingSelectionCvId === cv.id ? "Unselecting…" : "Unselect CV"}
+          </button> : <button
             type="button"
             className="button button-secondary"
             aria-label={`Select CV for ${cv.name}`}
-            disabled={selectingCvId !== null}
-            onClick={() => void selectCv(cv)}
+            disabled={updatingSelectionCvId !== null}
+            onClick={() => void updateCvSelection(cv, true)}
           >
-            {selectingCvId === cv.id ? "Selecting…" : "Select CV"}
+            {updatingSelectionCvId === cv.id ? "Selecting…" : "Select CV"}
           </button>}
           {cv.hasPdfPreview && <button
             type="button"
@@ -189,7 +198,7 @@ export function CvLibrary({ cvs }: { cvs: CvLibraryItemDto[] }) {
             type="button"
             className="button button-danger"
             aria-label={`Delete CV for ${cv.name}`}
-            disabled={selectingCvId !== null || deletingCvId !== null}
+            disabled={updatingSelectionCvId !== null || deletingCvId !== null}
             onClick={(event) => {
               dialogOpener.current = event.currentTarget;
               setActionError("");

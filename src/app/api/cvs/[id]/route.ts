@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-const selectSchema = z.object({ isDefault: z.literal(true) }).strict();
+const selectionSchema = z.object({ isDefault: z.boolean() }).strict();
 
 function mutationError(error: unknown, fallback = "Could not update this CV."): NextResponse {
   if (error instanceof AuthRequiredError) {
@@ -31,7 +31,7 @@ export async function PATCH(
     const [{ id }, user, input] = await Promise.all([
       params,
       requireUser(),
-      request.json().then((value) => selectSchema.parse(value)),
+      request.json().then((value) => selectionSchema.parse(value)),
     ]);
     if (!z.string().uuid().safeParse(id).success) {
       return NextResponse.json({ error: "CV version not found." }, { status: 404 });
@@ -39,7 +39,7 @@ export async function PATCH(
 
     const repository = await getDataRepository({ userId: user.id });
     await repository.updateCvVersion(id, { isDefault: input.isDefault });
-    return NextResponse.json({ selected: true });
+    return NextResponse.json({ selected: input.isDefault });
   } catch (error) {
     return mutationError(error);
   }

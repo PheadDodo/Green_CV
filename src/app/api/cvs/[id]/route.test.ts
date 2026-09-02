@@ -63,6 +63,19 @@ describe("PATCH /api/cvs/[id]", () => {
     expect(mocks.updateCvVersion).toHaveBeenCalledWith(CV_ID, { isDefault: true });
     expect(await response.json()).toEqual({ selected: true });
   });
+
+  it("unselects an owner-scoped CV", async () => {
+    const response = await PATCH(new Request("http://localhost/api/cvs/id", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isDefault: false }),
+    }), { params: Promise.resolve({ id: CV_ID }) });
+
+    expect(response.status).toBe(200);
+    expect(mocks.getDataRepository).toHaveBeenCalledWith({ userId: "owner-id" });
+    expect(mocks.updateCvVersion).toHaveBeenCalledWith(CV_ID, { isDefault: false });
+    expect(await response.json()).toEqual({ selected: false });
+  });
 });
 
 describe("DELETE /api/cvs/[id]", () => {

@@ -124,6 +124,36 @@ describe("CvLibrary", () => {
     expect(within(screen.getByText("Pasted profile").closest("article")!).getByText("Selected")).toBeTruthy();
   });
 
+  it("unselects the default CV and leaves future choices blank", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CvLibrary cvs={[cv, pastedCv]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unselect CV for ML Engineer v4" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/cvs/cv-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isDefault: false }),
+    }));
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(screen.queryByText("Selected")).toBeNull();
+    expect(screen.getByRole("button", { name: "Select CV for ML Engineer v4" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Select CV for Pasted profile" })).toBeTruthy();
+  });
+
+  it("keeps the default selected when unselection fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    render(<CvLibrary cvs={[cv, pastedCv]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unselect CV for ML Engineer v4" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not unselect this CV.");
+    expect(screen.getByText("Selected")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Select CV for ML Engineer v4" })).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it("confirms and deletes a CV while explaining what history remains", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);

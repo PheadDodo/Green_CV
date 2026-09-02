@@ -90,6 +90,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .metricFoot { color: var(--green-2); font-size: 10px; font-weight: 750; }
 .dashboardGrid { display: grid; grid-template-columns: minmax(0,1.55fr) minmax(285px,.75fr); gap: 15px; }
 .funnelChart { min-height: 230px; width: 100%; }
+.statusPanel { margin-top: 15px; }
+.statusChart { display: grid; grid-template-columns: minmax(170px,.65fr) minmax(210px,1fr); gap: 20px; align-items: center; margin: 0; }
+.statusChartGraphic { height: 230px; position: relative; }
+.statusChartCanvas { width: 100%; height: 100%; }
+.statusChartTotal { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.statusChartTotal strong { font: 800 30px/1 "Manrope", sans-serif; letter-spacing: -.05em; color: var(--green-dark); }
+.statusChartTotal span { margin-top: 6px; color: var(--muted); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+.statusChartEmpty { width: 210px; max-width: 100%; height: 210px; display: grid; place-items: center; margin: 10px auto; padding: 25px; border-radius: 50%; background: var(--surface-soft); color: var(--muted); text-align: center; font-size: 11px; line-height: 1.6; }
+.statusChartLegend { min-width: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 9px 13px; padding: 0; margin: 0; }
+.statusChartLegend li { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 11px; border: 1px solid #edf0ed; border-radius: 10px; color: var(--muted); font-size: 10px; }
+.statusChartLegend li > strong { color: var(--ink); font: 800 13px "Manrope", sans-serif; }
+.statusLegendLabel { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.statusLegendLabel i { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; }
 .chartLegend { display: flex; gap: 16px; flex-wrap: wrap; margin: 5px 0 0; color: var(--muted); font-size: 10px; }
 .chartLegend span { display: flex; align-items: center; gap: 6px; }
 .legendDot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
@@ -295,6 +308,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .metricGrid { gap: 9px; }
   .metricCard { padding: 14px; }
   .metricValue { font-size: 24px; }
+  .statusChart { grid-template-columns: 1fr; gap: 13px; }
+  .statusChartGraphic { height: 210px; }
   .pipelineBoard { grid-template-columns: repeat(5,245px); }
   .formGrid, .factsGrid, .evidenceGrid { grid-template-columns: 1fr; }
   .detailTop { grid-template-columns: 1fr; }
@@ -315,4 +330,5 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .headerActions { margin-top: 15px; justify-content: flex-start; }
   .activityItem { grid-template-columns: 34px minmax(0,1fr); }
   .activityItem > .badge { display: none; }
+  .statusChartLegend { grid-template-columns: 1fr; }
 }

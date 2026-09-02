@@ -57,6 +57,20 @@ describe("LocalDataRepository", () => {
     expect((await repository.getCvVersion(cv.id))?.content).toBe(cv.content);
   });
 
+  it("leaves every CV unselected when the default is explicitly unselected", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
+    temporaryDirectories.push(directory);
+    const repository = new LocalDataRepository({ filePath: path.join(directory, "store.json") });
+    const cvs = await repository.listCvVersions();
+    const selectedCv = cvs.find(cv => cv.isDefault);
+    expect(selectedCv).toBeTruthy();
+    expect(cvs.length).toBeGreaterThan(1);
+
+    await repository.updateCvVersion(selectedCv!.id, { isDefault: false });
+
+    expect((await repository.listCvVersions()).every(cv => !cv.isDefault)).toBe(true);
+  });
+
   it("deletes an owned CV and detaches preserved application history", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
     temporaryDirectories.push(directory);
