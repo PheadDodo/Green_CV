@@ -1,32 +1,38 @@
-const SECTION_TITLES = new Map<string, string>([
-  ["summary", "Professional Summary"],
-  ["profile", "Professional Summary"],
-  ["professional summary", "Professional Summary"],
-  ["career objective", "Professional Summary"],
-  ["experience", "Experience"],
-  ["work experience", "Experience"],
-  ["professional experience", "Experience"],
-  ["employment history", "Experience"],
-  ["work history", "Experience"],
-  ["education", "Education"],
-  ["academic background", "Education"],
-  ["skills", "Skills"],
-  ["technical skills", "Skills"],
-  ["core skills", "Skills"],
-  ["core competencies", "Skills"],
-  ["technical expertise", "Skills"],
-  ["projects", "Projects"],
-  ["selected projects", "Projects"],
-  ["certifications", "Certifications"],
-  ["certificates", "Certifications"],
-  ["languages", "Languages"],
+type CvSection = Readonly<{
+  category: string;
+  heading: string;
+}>;
+
+const SECTION_TITLES = new Map<string, CvSection>([
+  ["summary", { category: "Professional Summary", heading: "Summary" }],
+  ["profile", { category: "Professional Summary", heading: "Profile" }],
+  ["professional summary", { category: "Professional Summary", heading: "Professional Summary" }],
+  ["career objective", { category: "Professional Summary", heading: "Career Objective" }],
+  ["experience", { category: "Experience", heading: "Experience" }],
+  ["work experience", { category: "Experience", heading: "Work Experience" }],
+  ["professional experience", { category: "Experience", heading: "Professional Experience" }],
+  ["employment history", { category: "Experience", heading: "Employment History" }],
+  ["work history", { category: "Experience", heading: "Work History" }],
+  ["education", { category: "Education", heading: "Education" }],
+  ["academic background", { category: "Education", heading: "Academic Background" }],
+  ["skills", { category: "Skills", heading: "Skills" }],
+  ["technical skills", { category: "Skills", heading: "Technical Skills" }],
+  ["core skills", { category: "Skills", heading: "Core Skills" }],
+  ["core competencies", { category: "Skills", heading: "Core Competencies" }],
+  ["technical expertise", { category: "Skills", heading: "Technical Expertise" }],
+  ["projects", { category: "Projects", heading: "Projects" }],
+  ["selected projects", { category: "Projects", heading: "Selected Projects" }],
+  ["relevant research and projects", { category: "Projects", heading: "Relevant Research and Projects" }],
+  ["certifications", { category: "Certifications", heading: "Certifications" }],
+  ["certificates", { category: "Certifications", heading: "Certificates" }],
+  ["languages", { category: "Languages", heading: "Languages" }],
 ]);
 
 const COMPACT_SECTION_TITLES = new Map(
   [...SECTION_TITLES].map(([label, title]) => [label.replace(/[^\p{L}\p{N}]+/gu, ""), title]),
 );
 
-function canonicalSection(line: string): string | null {
+function matchSection(line: string): CvSection | null {
   const candidate = line
     .replace(/^#{1,6}\s+/, "")
     .replace(/[:\s]+$/, "")
@@ -35,6 +41,10 @@ function canonicalSection(line: string): string | null {
   return SECTION_TITLES.get(candidate)
     ?? COMPACT_SECTION_TITLES.get(candidate.replace(/[^\p{L}\p{N}]+/gu, ""))
     ?? null;
+}
+
+function canonicalSection(line: string): string | null {
+  return matchSection(line)?.category ?? null;
 }
 
 export function canonicalizeCvMarkdown(input: string): string {
@@ -48,9 +58,9 @@ export function canonicalizeCvMarkdown(input: string): string {
   const output: string[] = [];
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    const section = canonicalSection(line);
+    const section = matchSection(line);
     if (section) {
-      output.push(`## ${section}`);
+      output.push(`## ${section.heading}`);
       continue;
     }
     const bullet = line.match(/^[•●▪◦‣]\s*(.+)$/u);

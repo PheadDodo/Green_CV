@@ -18,11 +18,33 @@ Python, SQL, Docker
 `);
 
     expect(markdown).toContain("Alex Morgan");
-    expect(markdown).toContain("## Experience");
+    expect(markdown).toContain("## Professional Experience");
     expect(markdown).toContain("- Built a Python evaluation service");
     expect(markdown).toContain("## Education");
     expect(markdown).toContain("## Skills");
     expect(markdown).not.toContain("Kubernetes");
+  });
+
+  it("preserves recognizable source section titles in the generated Markdown", () => {
+    const markdown = canonicalizeCvMarkdown(`
+CORESKILLS
+Python, SQL
+
+RELEVANTRESEARCHANDPROJECTS
+Fraud Detection
+
+PROFESSIONALEXPERIENCE
+Machine Learning Engineer
+`);
+
+    expect(markdown).toBe(`## Core Skills
+Python, SQL
+
+## Relevant Research and Projects
+Fraud Detection
+
+## Professional Experience
+Machine Learning Engineer`);
   });
 });
 
@@ -99,14 +121,14 @@ Python`,
 
   it("recognizes section labels whose spaces were collapsed by PDF extraction", () => {
     const report = scanCvForAts({
-      content: `PROFESSIONALEXPERIENCE
+      content: canonicalizeCvMarkdown(`PROFESSIONALEXPERIENCE
 Product Manager
 
 ## Education
 University
 
 CORESKILLS
-Python, SQL`,
+Python, SQL`),
       mimeType: "application/pdf",
     });
 

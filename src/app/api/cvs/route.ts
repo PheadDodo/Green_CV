@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import mammoth from "mammoth";
-import pdf from "pdf-parse/lib/pdf-parse.js";
 import { z } from "zod";
 import { AuthRequiredError, requireUser } from "@/lib/auth";
 import { canonicalizeCvMarkdown } from "@/lib/cv-artifacts";
@@ -11,6 +10,7 @@ import {
 } from "@/lib/cv-file-store";
 import { getDataRepository } from "@/lib/data";
 import { CvExtractionError, extractCvText } from "@/lib/import/cv";
+import { extractPdfText } from "@/lib/import/pdf";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
         maxBytes: MAX_BYTES,
         maxCharacters: MAX_CHARACTERS,
         extractors: {
-          pdf: async ({ bytes }) => (await pdf(Buffer.from(bytes))).text,
+          pdf: async ({ bytes }) => extractPdfText(bytes),
           docx: async ({ bytes }) => (await mammoth.extractRawText({ buffer: Buffer.from(bytes) })).value,
         },
       },

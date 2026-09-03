@@ -55,6 +55,9 @@ These definitions live in tested domain code, not in presentation components.
 
 - Every new upload is validated and converted to canonical Markdown before it is
   saved as the immutable `cv_versions.content` used by evaluation.
+- PDF imports reconstruct word separators from text positioning before Markdown
+  conversion. Recognized section labels keep their readable source wording while
+  ATS checks map aliases such as Core Skills to standard semantic categories.
 - `CV.md` is generated from that private canonical content on download, avoiding a
   duplicate file and keeping local and PostgreSQL-backed environments consistent.
 - Original files use opaque private paths. Only authenticated, owner-scoped API
