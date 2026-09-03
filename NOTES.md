@@ -35,6 +35,22 @@ append-only. Owner-initiated deletion remains available as a privacy operation.
 
 These definitions live in tested domain code, not in presentation components.
 
+## Reminder workflow
+
+- The dashboard shows the first three pending reminders in due-date order. Resolving
+  one immediately reveals the next reminder and refreshes server data.
+- A reminder linked to an application provides a direct application link. Unlinked
+  reminders remain actionable without exposing an invalid destination.
+- Completing and dismissing are authenticated, owner-scoped status transitions.
+  Both leave the reminder record available for history; completion records a time,
+  while dismissal leaves `completedAt` empty. The first terminal transition wins;
+  retrying the same action is idempotent and cannot rewrite its timestamp.
+- Overdue reminders are calculated from a server-provided timestamp so the initial
+  client render is stable. Due labels include UTC explicitly to prevent server and
+  browser hydration drift. Failed actions keep the reminder visible and reusable.
+- PostgreSQL already supports the `dismissed` status, update permissions, and Row
+  Level Security, so this workflow requires no schema migration.
+
 ## CV library artifacts
 
 - Every new upload is validated and converted to canonical Markdown before it is

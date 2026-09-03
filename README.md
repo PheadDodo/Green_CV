@@ -29,12 +29,14 @@ demo identity and its private files are not exposed to other devices on your LAN
    compatibility scan, download its canonical `CV.md`, and select or unselect the
    default CV used for future application choices.
 4. Run an evidence-constrained fit evaluation and review honest gaps and safe edits.
-5. Record replies, interviews, follow-ups, and stage changes. Closed roles remain
-   searchable and can be reopened if a status was changed accidentally.
+5. Record replies, interviews, follow-ups, and stage changes. Open a reminder's
+   application, then complete or dismiss the reminder directly from the dashboard.
+   Closed roles remain searchable and can be reopened if a status was changed
+   accidentally.
 
 Main routes:
 
-- `/dashboard` — metrics, funnel, current-status chart, reminders, activity, and next actions
+- `/dashboard` — metrics, charts, actionable reminders, activity, and next actions
 - `/applications` — searchable open and closed application pipeline
 - `/applications/:id` — job brief, source description, CV, and interaction history
 - `/applications/:id/evaluation` — versioned fit evidence, gaps, and safe CV edits
@@ -137,5 +139,5 @@ npm.cmd run build
 GitHub Actions runs the same checks on every push and pull request. Tests cover job
 brief extraction, closed-role lifecycle behavior, dashboard metrics, CV evidence
 safety, imports, URL SSRF protection, CV extraction, automation lifecycle,
-artifact access, ATS compatibility, configuration safety, and concurrent local
-persistence.
+artifact access, ATS compatibility, reminder ownership and actions, configuration
+safety, and concurrent local persistence.

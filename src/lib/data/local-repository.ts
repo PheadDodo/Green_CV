@@ -843,10 +843,24 @@ export class LocalDataRepository implements DataRepository {
   completeReminder(id: string): Promise<Reminder> {
     return this.mutate((document) => {
       const reminder = requireOwned(document.reminders, id, this.userId, "Reminder");
+      if (reminder.status === "completed") return reminder;
+      if (reminder.status !== "pending") throw new DataNotFoundError("Reminder", id);
       const timestamp = now();
       reminder.status = "completed";
       reminder.completedAt = timestamp;
       reminder.updatedAt = timestamp;
+      return reminder;
+    });
+  }
+
+  dismissReminder(id: string): Promise<Reminder> {
+    return this.mutate((document) => {
+      const reminder = requireOwned(document.reminders, id, this.userId, "Reminder");
+      if (reminder.status === "dismissed") return reminder;
+      if (reminder.status !== "pending") throw new DataNotFoundError("Reminder", id);
+      reminder.status = "dismissed";
+      reminder.completedAt = null;
+      reminder.updatedAt = now();
       return reminder;
     });
   }

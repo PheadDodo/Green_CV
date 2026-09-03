@@ -74,6 +74,7 @@ export interface DataRepository {
   listReminders(includeCompleted?: boolean): Promise<Reminder[]>;
   upsertReminder(input: ReminderUpsertInput): Promise<Reminder>;
   completeReminder(id: string): Promise<Reminder>;
+  dismissReminder(id: string): Promise<Reminder>;
 
   listImportBatches(): Promise<ImportBatch[]>;
   createImportBatch(input: ImportBatchCreateInput): Promise<ImportBatch>;

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, BriefcaseBusiness, CalendarCheck2, MessageCircleReply, Sparkles, Target } from "lucide-react";
 import { AddRoleDialog } from "@/components/add-role-dialog";
 import { ApplicationStatusChart } from "@/components/application-status-chart";
+import { DashboardReminders } from "@/components/dashboard-reminders";
 import { FunnelChart } from "@/components/funnel-chart";
 import { Badge, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
@@ -44,7 +45,15 @@ export default async function DashboardPage() {
       </section>
       <aside>
         {featured ? <article className="panel nextMove"><div className="panelHeader"><div><span className="eyebrow" style={{ color: "#f4c653" }}>Best next move</span><h2>High-fit opportunity</h2><p>Latest evidence-backed recommendation</p></div><Sparkles size={18} /></div><div className="panelBody featuredRole"><div className="fitScore" style={{ "--score": featured.latestEvaluation?.overallScore ?? 0 } as React.CSSProperties}><span>{featured.latestEvaluation?.overallScore}</span></div><h3>{featured.job.title}</h3><p>{featured.job.company} · {featured.job.location || featured.job.workplaceType}</p><div className="skillPills">{featured.latestEvaluation?.strengths.slice(0,3).map(value => <span key={value}>{value.length > 24 ? `${value.slice(0,24)}…` : value}</span>)}</div><Link className="button button-secondary" href={`/applications/${featured.id}/evaluation`}>Open evaluation <ArrowUpRight size={14} /></Link></div></article> : <article className="panel"><div className="panelHeader"><div><h2>Your next move</h2><p>Evaluate a role to surface it here.</p></div></div></article>}
-        <article className="panel" style={{ marginTop: 15 }}><div className="panelHeader"><div><h2>Upcoming reminders</h2><p>Generated from your activity and rules</p></div><Badge tone="amber">{reminders.length}</Badge></div><div className="panelBody reminderList">{reminders.slice(0,3).map(reminder => <div className="reminderItem" key={reminder.id}><span className="timelineDot">✓</span><div><b>{reminder.title}</b><span>{new Date(reminder.dueAt).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric" })}</span></div></div>)}</div></article>
+        <DashboardReminders
+          reminders={reminders.map(({ id, applicationId, title, dueAt }) => ({
+            id,
+            applicationId,
+            title,
+            dueAt,
+          }))}
+          nowIso={new Date().toISOString()}
+        />
       </aside>
     </div>
   </main>;

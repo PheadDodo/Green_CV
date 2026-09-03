@@ -249,10 +249,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .switch::after { content: ""; display: block; width: 18px; height: 18px; border-radius: 50%; background: white; transition: .15s ease; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
 .switch.on { background: var(--green); }
 .switch.on::after { transform: translateX(16px); }
-.reminderItem, .runItem { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 11px; background: var(--surface-soft); border-radius: 10px; }
-.reminderItem b, .reminderItem span, .runItem b, .runItem span { display: block; }
-.reminderItem b, .runItem b { font-size: 9px; }
-.reminderItem span, .runItem span { color: var(--muted); font-size: 8px; margin-top: 3px; }
+.dashboardReminders { margin-top: 15px; }
+.reminderItem { display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 9px 10px; align-items: start; padding: 11px; background: var(--surface-soft); border: 1px solid transparent; border-radius: 10px; transition: opacity .15s ease; }
+.reminderItem[aria-busy="true"] { opacity: .7; }
+.reminderItemOverdue { background: #fff8f7; border-color: #f2d6d2; border-left: 3px solid var(--red); padding-left: 9px; }
+.reminderItemOverdue .timelineDot { color: var(--red); background: #f9dfdc; }
+.reminderDetails { min-width: 0; }
+.reminderDetails > b, .reminderDetails > time { display: block; }
+.reminderDetails > b { font-size: 11px; line-height: 1.4; }
+.reminderDetails > time { color: #4f5b57; font-size: 10px; margin-top: 4px; }
+.reminderDetails > .badge { display: inline-flex; margin-top: 7px; }
+.reminderActions { grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; }
+.reminderActions .button { min-height: 32px; padding: 7px 9px; border-radius: 8px; font-size: 10px; }
+.reminderItem:focus-visible { outline: 3px solid rgba(20,91,69,.22); outline-offset: 2px; }
+.reminderAnnouncement { margin: 0; color: var(--green); font-size: 10px; font-weight: 700; }
+.reminderAnnouncement:not(:empty) { padding: 8px 10px; border-radius: 9px; background: var(--mint); }
+.reminderError { grid-column: 1 / -1; margin: 0; }
+.reminderEmpty { margin: 0; }
+.runItem { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 11px; background: var(--surface-soft); border-radius: 10px; }
+.runItem b, .runItem span { display: block; }
+.runItem b { font-size: 9px; }
+.runItem span { color: var(--muted); font-size: 8px; margin-top: 3px; }
 
 /* Auth and states */
 .authPage { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; background: white; }

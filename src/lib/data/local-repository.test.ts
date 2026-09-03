@@ -103,4 +103,51 @@ describe("LocalDataRepository", () => {
     await expect(owner.deleteCvVersion(foreignCv.id)).rejects.toThrow(/not found/i);
     expect(await otherUser.getCvVersion(foreignCv.id)).toEqual(foreignCv);
   });
+
+  it("dismisses a reminder while retaining it in history", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
+    temporaryDirectories.push(directory);
+    const repository = new LocalDataRepository({ filePath: path.join(directory, "store.json") });
+    const reminder = (await repository.listReminders())[0];
+
+    const dismissed = await repository.dismissReminder(reminder.id);
+
+    expect(dismissed.status).toBe("dismissed");
+    expect(dismissed.completedAt).toBeNull();
+    expect((await repository.listReminders()).some(item => item.id === reminder.id)).toBe(false);
+    expect((await repository.listReminders(true)).find(item => item.id === reminder.id)?.status)
+      .toBe("dismissed");
+  });
+
+  it("does not dismiss a reminder owned by another user", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
+    temporaryDirectories.push(directory);
+    const filePath = path.join(directory, "store.json");
+    const owner = new LocalDataRepository({ filePath, userId: "owner-a" });
+    const otherUser = new LocalDataRepository({ filePath, userId: "owner-b" });
+    const foreignReminder = await otherUser.upsertReminder({
+      title: "Private reminder",
+      dueAt: "2026-09-03T09:00:00.000Z",
+    });
+
+    await expect(owner.dismissReminder(foreignReminder.id)).rejects.toThrow(/not found/i);
+    expect((await otherUser.listReminders()).find(item => item.id === foreignReminder.id)?.status)
+      .toBe("pending");
+  });
+
+  it("keeps the first terminal reminder transition when another action races it", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "greencv-store-"));
+    temporaryDirectories.push(directory);
+    const repository = new LocalDataRepository({ filePath: path.join(directory, "store.json") });
+    const reminder = (await repository.listReminders())[0];
+
+    const completed = await repository.completeReminder(reminder.id);
+    const replayedCompletion = await repository.completeReminder(reminder.id);
+    await expect(repository.dismissReminder(reminder.id)).rejects.toThrow(/not found/i);
+
+    const retained = (await repository.listReminders(true)).find(item => item.id === reminder.id);
+    expect(retained?.status).toBe("completed");
+    expect(replayedCompletion.completedAt).toBe(completed.completedAt);
+    expect(retained?.completedAt).toBe(completed.completedAt);
+  });
 });

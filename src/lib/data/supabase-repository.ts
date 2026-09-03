@@ -759,7 +759,38 @@ export class SupabaseDataRepository implements DataRepository {
       .update({ status: "completed", completed_at: new Date().toISOString() })
       .eq("id", id)
       .eq("user_id", this.userId)
+      .eq("status", "pending")
       .select("*")
+      .maybeSingle();
+    throwQueryError(error);
+    if (!data) return this.getTerminalReminder(id, "completed");
+    return toReminder(data);
+  }
+
+  async dismissReminder(id: string): Promise<Reminder> {
+    const { data, error } = await this.client
+      .from("reminders")
+      .update({ status: "dismissed", completed_at: null })
+      .eq("id", id)
+      .eq("user_id", this.userId)
+      .eq("status", "pending")
+      .select("*")
+      .maybeSingle();
+    throwQueryError(error);
+    if (!data) return this.getTerminalReminder(id, "dismissed");
+    return toReminder(data);
+  }
+
+  private async getTerminalReminder(
+    id: string,
+    status: "completed" | "dismissed",
+  ): Promise<Reminder> {
+    const { data, error } = await this.client
+      .from("reminders")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", this.userId)
+      .eq("status", status)
       .maybeSingle();
     throwQueryError(error);
     if (!data) throw new DataNotFoundError("Reminder", id);
