@@ -9,5 +9,5 @@ export default async function AutomationPage() {
   const user = await requireUser();
   const repository = await getDataRepository({ userId: user.id });
   const [rules, runs] = await Promise.all([repository.listAutomationRules(), repository.listAutomationRuns({ limit: 30 })]);
-  return <main className="page"><PageHeader eyebrow="Controlled assistance" title="Automation" description="Let repeatable rules handle evaluation and reminders while every run remains visible and cancellable." /><AutomationSettings initialRules={rules} initialRuns={runs} /></main>;
+  return <main className="page"><PageHeader eyebrow="Controlled assistance" title="Automation" description="Let repeatable rules handle evaluation and reminders while every run remains visible and auditable. Eligible reminder runs can be cancelled." /><AutomationSettings initialRules={rules} initialRuns={runs} /></main>;
 }

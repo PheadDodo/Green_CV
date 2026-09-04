@@ -1,7 +1,9 @@
 import type {
   AutomationRule,
   AutomationRuleUpsertInput,
+  AutomationReminderCreateInput,
   AutomationRun,
+  AutomationRunClaimInput,
   AutomationRunCreateInput,
   AutomationRunListOptions,
   AutomationRunUpdateInput,
@@ -75,16 +77,27 @@ export interface DataRepository {
   upsertReminder(input: ReminderUpsertInput): Promise<Reminder>;
   completeReminder(id: string): Promise<Reminder>;
   dismissReminder(id: string): Promise<Reminder>;
+  ensureAutomationReminder(
+    runId: string,
+    input: AutomationReminderCreateInput,
+  ): Promise<Reminder>;
 
   listImportBatches(): Promise<ImportBatch[]>;
   createImportBatch(input: ImportBatchCreateInput): Promise<ImportBatch>;
   updateImportBatch(id: string, input: ImportBatchUpdateInput): Promise<ImportBatch>;
+  deleteImportBatch(id: string): Promise<void>;
 
   listAutomationRules(): Promise<AutomationRule[]>;
   upsertAutomationRule(input: AutomationRuleUpsertInput): Promise<AutomationRule>;
   listAutomationRuns(options?: AutomationRunListOptions): Promise<AutomationRun[]>;
+  getAutomationRun(id: string): Promise<AutomationRun | null>;
   getAutomationRunByIdempotencyKey(idempotencyKey: string): Promise<AutomationRun | null>;
   createAutomationRun(input: AutomationRunCreateInput): Promise<AutomationRun>;
+  claimAutomationRun(
+    id: string,
+    input: AutomationRunClaimInput,
+  ): Promise<AutomationRun | null>;
+  cancelAutomationRun(id: string): Promise<AutomationRun>;
   updateAutomationRun(id: string, input: AutomationRunUpdateInput): Promise<AutomationRun>;
 
   getDashboardSnapshot(): Promise<DashboardSnapshot>;

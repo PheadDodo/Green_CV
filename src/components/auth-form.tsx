@@ -8,6 +8,17 @@ import { Button } from "./ui";
 
 type Mode = "signin" | "signup" | "recover";
 
+async function responseBody(response: Response): Promise<Record<string, unknown>> {
+  try {
+    const body: unknown = await response.json();
+    return typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 export function AuthForm({
   configured,
   redirectTo = "/dashboard",
@@ -26,14 +37,37 @@ export function AuthForm({
   const [pending, setPending] = useState(false);
 
   async function submit(formData: FormData) {
-    setPending(true); setError(""); setMessage("");
-    const endpoint = mode === "signup" ? "signup" : mode === "recover" ? "recover" : "login";
-    const response = await fetch(`/api/auth/${endpoint}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(Object.fromEntries(formData.entries())) });
-    const body = await response.json();
-    setPending(false);
-    if (!response.ok) return setError(body.error ?? "Authentication failed.");
-    if (body.message) return setMessage(body.message);
-    router.push(redirectTo); router.refresh();
+    setPending(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const endpoint = mode === "signup"
+        ? "signup"
+        : mode === "recover"
+          ? "recover"
+          : "login";
+      const response = await fetch(`/api/auth/${endpoint}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(formData.entries())),
+      });
+      const body = await responseBody(response);
+      if (!response.ok) {
+        setError(typeof body.error === "string" ? body.error : "Authentication failed.");
+        return;
+      }
+      if (typeof body.message === "string") {
+        setMessage(body.message);
+        return;
+      }
+      router.push(redirectTo);
+      router.refresh();
+    } catch {
+      setError("Authentication failed.");
+    } finally {
+      setPending(false);
+    }
   }
 
   if (!configured) return <div className="authForm"><Logo /><h2>Explore the demo</h2><p>Supabase is not configured, so GreenCV is running as a private local workspace with persistent demo data.</p><Button onClick={() => { router.push(redirectTo); router.refresh(); }}>Enter demo workspace <ArrowRight size={16} /></Button><div className="notice" style={{ marginTop: 18 }}>Add Supabase values to <code>.env.local</code> to enable real accounts and Row Level Security.</div></div>;

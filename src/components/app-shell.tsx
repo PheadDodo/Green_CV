@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Upload,
   X
@@ -21,7 +22,8 @@ const links = [
   { href: "/applications", label: "Applications", icon: BriefcaseBusiness },
   { href: "/cvs", label: "CV library", icon: FileStack },
   { href: "/imports", label: "Imports", icon: Upload },
-  { href: "/settings/automation", label: "Automation", icon: Settings2 }
+  { href: "/settings/automation", label: "Automation", icon: Settings2 },
+  { href: "/settings/account", label: "Account security", icon: ShieldCheck }
 ];
 
 export function AppShell({

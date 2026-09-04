@@ -62,3 +62,31 @@ describe("CV selection migration", () => {
     expect(sql).toContain("existing.user_id = new.user_id");
   });
 });
+
+describe("atomic imported application migration", () => {
+  it("creates the imported application aggregate and audit event in one owner-scoped RPC", async () => {
+    const sql = await readFile(
+      path.join(
+        process.cwd(),
+        "supabase",
+        "migrations",
+        "20260904000100_create_imported_application.sql",
+      ),
+      "utf8",
+    );
+
+    expect(sql).toContain("create function public.create_imported_application(");
+    expect(sql).toContain("v_user_id uuid := auth.uid()");
+    expect(sql).toMatch(/from public\.import_batches\s+where id = p_batch_id and user_id = v_user_id/);
+    expect(sql).toContain("insert into public.jobs");
+    expect(sql).toContain("insert into public.applications");
+    expect(sql).toContain("insert into public.application_events");
+    expect(sql).toContain("'imported'");
+    expect(sql).toContain("jsonb_build_object('batchId', p_batch_id)");
+    expect(sql).toContain("return jsonb_build_object(");
+    expect(sql).toContain("security invoker");
+    expect(sql).toContain("set search_path = public, pg_temp");
+    expect(sql).toContain("revoke all on function public.create_imported_application(jsonb, jsonb, uuid)");
+    expect(sql).toContain("grant execute on function public.create_imported_application(jsonb, jsonb, uuid) to authenticated");
+  });
+});

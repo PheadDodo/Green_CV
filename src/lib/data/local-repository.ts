@@ -13,6 +13,10 @@ import {
   DEMO_USER_ID,
   type DataStoreDocument,
 } from "./seed";
+import {
+  MAX_AUTOMATION_RUN_ATTEMPTS,
+  REMINDER_AUTOMATION_RUN_LEASE_MS,
+} from "./types";
 import type {
   Application,
   ApplicationEvent,
@@ -22,7 +26,9 @@ import type {
   ApplicationStatus,
   AutomationRule,
   AutomationRuleUpsertInput,
+  AutomationReminderCreateInput,
   AutomationRun,
+  AutomationRunClaimInput,
   AutomationRunCreateInput,
   AutomationRunListOptions,
   AutomationRunUpdateInput,
@@ -110,9 +116,12 @@ function normalizeDocument(value: unknown, seedUserId: string): DataStoreDocumen
 
 async function writeDocument(filePath: string, document: DataStoreDocument): Promise<void> {
   const directory = path.dirname(filePath);
-  await mkdir(directory, { recursive: true });
+  await mkdir(directory, { recursive: true, mode: 0o700 });
   const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.${globalThis.crypto.randomUUID()}.tmp`;
-  await writeFile(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+  await writeFile(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
   await rename(temporaryPath, filePath);
 }
 
@@ -503,6 +512,7 @@ export class LocalDataRepository implements DataRepository {
   deleteApplication(id: string): Promise<void> {
     return this.mutate((document) => {
       const application = requireOwned(document.applications, id, this.userId, "Application");
+      const timestamp = new Date().toISOString();
       document.applications = document.applications.filter((item) => item.id !== id);
       document.jobs = document.jobs.filter((item) => item.id !== application.jobId);
       document.applicationEvents = document.applicationEvents.filter(
@@ -510,6 +520,9 @@ export class LocalDataRepository implements DataRepository {
       );
       document.evaluations = document.evaluations.filter((item) => item.applicationId !== id);
       document.reminders = document.reminders.filter((item) => item.applicationId !== id);
+      document.automationRuns = document.automationRuns.map((run) => run.applicationId === id
+        ? { ...run, applicationId: null, updatedAt: timestamp }
+        : run);
     });
   }
 
@@ -865,6 +878,48 @@ export class LocalDataRepository implements DataRepository {
     });
   }
 
+  ensureAutomationReminder(
+    runId: string,
+    input: AutomationReminderCreateInput,
+  ): Promise<Reminder> {
+    return this.mutate((document) => {
+      const run = requireOwned(document.automationRuns, runId, this.userId, "Automation run");
+      const existing = document.reminders.find((reminder) => reminder.id === runId);
+      if (existing) {
+        if (existing.userId !== this.userId || existing.applicationId !== input.applicationId) {
+          throw new DataConflictError("The automation reminder identity is already in use.");
+        }
+        return existing;
+      }
+      if (run.type !== "follow_up" && run.type !== "interview_prep") {
+        throw new DataConflictError("This automation run does not create a reminder.");
+      }
+      if (run.status !== "running") {
+        throw new DataConflictError("The automation run must be running before creating a reminder.");
+      }
+      if (run.applicationId !== input.applicationId) {
+        throw new DataConflictError("The reminder application does not match its automation run.");
+      }
+      requireOwned(document.applications, input.applicationId, this.userId, "Application");
+      if (!input.title.trim()) throw new DataConflictError("A reminder requires a title.");
+      const timestamp = now();
+      const reminder: Reminder = {
+        id: runId,
+        userId: this.userId,
+        applicationId: input.applicationId,
+        title: input.title.trim(),
+        notes: input.notes?.trim() || null,
+        dueAt: input.dueAt,
+        status: "pending",
+        completedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      document.reminders.push(reminder);
+      return reminder;
+    });
+  }
+
   async listImportBatches(): Promise<ImportBatch[]> {
     const document = await this.read();
     return clone(
@@ -909,6 +964,15 @@ export class LocalDataRepository implements DataRepository {
       if (input.completedAt !== undefined) batch.completedAt = input.completedAt;
       batch.updatedAt = now();
       return batch;
+    });
+  }
+
+  deleteImportBatch(id: string): Promise<void> {
+    return this.mutate((document) => {
+      requireOwned(document.importBatches, id, this.userId, "Import batch");
+      document.importBatches = document.importBatches.filter(
+        (batch) => batch.id !== id || batch.userId !== this.userId,
+      );
     });
   }
 
@@ -964,6 +1028,15 @@ export class LocalDataRepository implements DataRepository {
         )
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
         .slice(0, Math.max(0, options.limit ?? document.automationRuns.length)),
+    );
+  }
+
+  async getAutomationRun(id: string): Promise<AutomationRun | null> {
+    const document = await this.read();
+    return clone(
+      document.automationRuns.find(
+        (run) => run.id === id && run.userId === this.userId,
+      ) ?? null,
     );
   }
 
@@ -1024,6 +1097,75 @@ export class LocalDataRepository implements DataRepository {
         updatedAt: timestamp,
       };
       document.automationRuns.push(run);
+      return run;
+    });
+  }
+
+  claimAutomationRun(
+    id: string,
+    input: AutomationRunClaimInput,
+  ): Promise<AutomationRun | null> {
+    return this.mutate((document) => {
+      if (!Number.isSafeInteger(input.expectedAttempts) || input.expectedAttempts < 0) {
+        throw new DataConflictError("Expected attempts must be a non-negative integer.");
+      }
+      const startedAt = input.startedAt ?? now();
+      const startedTimestamp = Date.parse(startedAt);
+      if (!Number.isFinite(startedTimestamp)) {
+        throw new DataConflictError("A valid automation start time is required.");
+      }
+      const normalizedStartedAt = new Date(startedTimestamp).toISOString();
+      const run = document.automationRuns.find(
+        (candidate) => candidate.id === id && candidate.userId === this.userId,
+      );
+      const previousStartedTimestamp = Date.parse(run?.startedAt ?? "");
+      const staleReminderLease = Boolean(
+        run
+        && run.status === "running"
+        && (run.type === "follow_up" || run.type === "interview_prep")
+        && (
+          !Number.isFinite(previousStartedTimestamp)
+          || previousStartedTimestamp <= startedTimestamp - REMINDER_AUTOMATION_RUN_LEASE_MS
+        ),
+      );
+      if (
+        !run
+        || (
+          run.status !== "pending"
+          && run.status !== "failed"
+          && !staleReminderLease
+        )
+        || run.attempts !== input.expectedAttempts
+        || run.attempts >= MAX_AUTOMATION_RUN_ATTEMPTS
+        || !Number.isFinite(Date.parse(run.scheduledAt))
+        || Date.parse(run.scheduledAt) > startedTimestamp
+      ) {
+        return null;
+      }
+      run.status = "running";
+      run.attempts += 1;
+      run.startedAt = normalizedStartedAt;
+      run.completedAt = null;
+      run.errorMessage = null;
+      run.updatedAt = normalizedStartedAt;
+      return run;
+    });
+  }
+
+  cancelAutomationRun(id: string): Promise<AutomationRun> {
+    return this.mutate((document) => {
+      const run = requireOwned(document.automationRuns, id, this.userId, "Automation run");
+      if (run.status === "cancelled") return run;
+      if (
+        (run.status !== "pending" && run.status !== "failed")
+        || run.attempts >= MAX_AUTOMATION_RUN_ATTEMPTS
+      ) {
+        throw new DataConflictError("This automation run cannot be cancelled.");
+      }
+      const timestamp = now();
+      run.status = "cancelled";
+      run.completedAt = timestamp;
+      run.updatedAt = timestamp;
       return run;
     });
   }

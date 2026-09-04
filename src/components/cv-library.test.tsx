@@ -136,8 +136,8 @@ describe("CvLibrary", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isDefault: false }),
     }));
+    await waitFor(() => expect(screen.queryByText("Selected")).toBeNull());
     expect(refresh).toHaveBeenCalledOnce();
-    expect(screen.queryByText("Selected")).toBeNull();
     expect(screen.getByRole("button", { name: "Select CV for ML Engineer v4" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Select CV for Pasted profile" })).toBeTruthy();
   });

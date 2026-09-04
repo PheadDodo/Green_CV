@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth";
-import { getDataRepository } from "@/lib/data";
+import { AuthRequiredError, requireUser } from "@/lib/auth";
+import { DataConflictError, DataNotFoundError, getDataRepository } from "@/lib/data";
 import { APPLICATION_STATUSES, EMPLOYMENT_TYPES, WORKPLACE_TYPES } from "@/lib/data/types";
 import { runAutomations } from "@/lib/services/run-automations";
 
@@ -10,12 +10,12 @@ const createSchema = z.object({
   company: z.string().trim().min(2).max(180),
   description: z.string().trim().min(20).max(100_000),
   location: z.string().trim().max(200).optional(),
-  sourceUrl: z.union([z.literal(""), z.string().url()]).optional(),
+  sourceUrl: z.union([z.literal(""), z.url({ protocol: /^https?$/ })]).optional(),
   workplaceType: z.enum(WORKPLACE_TYPES).default("unspecified"),
   employmentType: z.enum(EMPLOYMENT_TYPES).default("full_time"),
   status: z.enum(APPLICATION_STATUSES).default("saved"),
   cvVersionId: z.string().uuid().or(z.literal("")).optional()
-});
+}).strict();
 
 export async function POST(request: Request) {
   try {
@@ -42,7 +42,18 @@ export async function POST(request: Request) {
     if (application.cvVersionId) await runAutomations(repository, user.id);
     return NextResponse.json({ application }, { status: 201 });
   } catch (error) {
-    const unauthorized = error instanceof Error && error.name === "AuthRequiredError";
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create application." }, { status: unauthorized ? 401 : 400 });
+    if (error instanceof AuthRequiredError) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Invalid application details." }, { status: 400 });
+    }
+    if (error instanceof DataNotFoundError) {
+      return NextResponse.json({ error: "CV version not found." }, { status: 404 });
+    }
+    if (error instanceof DataConflictError) {
+      return NextResponse.json({ error: "Application conflicts with existing data." }, { status: 409 });
+    }
+    return NextResponse.json({ error: "Could not create application." }, { status: 500 });
   }
 }

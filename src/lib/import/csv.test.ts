@@ -11,6 +11,7 @@ describe("parseJobsCsv", () => {
 
     expect(parseJobsCsv(csv)).toEqual({
       totalRows: 1,
+      jobRows: [2],
       jobs: [
         {
           title: "Senior, ML Engineer",
@@ -29,6 +30,32 @@ describe("parseJobsCsv", () => {
       ],
       errors: [],
     });
+  });
+
+  it("returns the physical source row for valid jobs across blank and multiline records", () => {
+    const csv = [
+      "title,company,description",
+      "ML Engineer,Acme,Build models",
+      "",
+      "Data Scientist,,Analyze data",
+      'Platform Engineer,Northstar,"Build reliable systems',
+      'across multiple regions"',
+      "",
+      "Product Analyst,Orbit,Measure product outcomes",
+    ].join("\n");
+
+    const result = parseJobsCsv(csv);
+
+    expect(result.totalRows).toBe(4);
+    expect(result.jobRows).toEqual([2, 5, 8]);
+    expect(result.jobs.map((job) => job.title)).toEqual([
+      "ML Engineer",
+      "Platform Engineer",
+      "Product Analyst",
+    ]);
+    expect(result.errors).toEqual([
+      expect.objectContaining({ row: 4, field: "company", code: "required" }),
+    ]);
   });
 
   it("keeps valid rows and reports actionable validation errors for invalid rows", () => {

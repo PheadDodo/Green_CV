@@ -44,7 +44,7 @@ export async function saveLocalCvFile(input: {
   const root = input.root ?? LOCAL_CV_FILE_ROOT;
   const storagePath = createCvStoragePath(input.userId, input.extension, input.id);
   const filePath = resolveLocalCvFile(storagePath, root);
-  await mkdir(path.dirname(filePath), { recursive: true });
+  await mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
   await writeFile(filePath, input.bytes, { flag: "wx", mode: 0o600 });
   return storagePath;
 }

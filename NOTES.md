@@ -62,6 +62,8 @@ These definitions live in tested domain code, not in presentation components.
   duplicate file and keeping local and PostgreSQL-backed environments consistent.
 - Original files use opaque private paths. Only authenticated, owner-scoped API
   routes can read them; storage paths never reach the browser.
+- Local demo storage creates CV files and their artifact directories with
+  owner-only permissions on platforms that support POSIX permission bits.
 - PDF previews use a short-lived browser Blob URL. ATS scans are deterministic
   compatibility guidance and do not claim to reproduce an employer's ATS score.
 - The first CV is selected automatically. Selecting another makes it the default
@@ -73,3 +75,44 @@ These definitions live in tested domain code, not in presentation components.
   content and detaches it from applications and evaluations. Historical evaluation
   results, including quoted CV evidence, and application activity remain as an
   audit trail; deleting the selected CV does not silently promote another version.
+
+## Application privacy
+
+- Owners can permanently delete an application from its detail page after an
+  explicit confirmation naming the role and company.
+- Deletion removes the application, its preserved job, timeline, reminders, and
+  evaluation history. Automation run audit entries remain without an application
+  reference, and CV versions remain reusable.
+- Missing and foreign-owned identifiers return the same not-found response so the
+  endpoint does not disclose whether another account owns a record.
+
+## Import provenance
+
+- CSV preview and commit share a 100-row synchronous limit so production storage
+  cannot accidentally execute thousands of sequential writes in one request.
+- The original filename, original CSV row numbers, validation failures, and later
+  persistence failures remain attached to the import batch.
+- Public URL imports use the same auditable batch lifecycle as CSV imports. Users
+  review extracted title, company, location, workplace, employment type, and full
+  description before saving.
+- Stored listing links must use HTTP or HTTPS, including on tampered commit requests.
+- Deleting an import batch removes only its provenance and row-level error details;
+  applications already created from that batch remain in the pipeline.
+
+## Reminder automation reliability
+
+- Follow-up timing is stored canonically in hours and edited in whole days;
+  interview-preparation timing is edited and stored in hours.
+- Only pending or retryable failed reminder runs can be cancelled. Running,
+  completed, exhausted, and evaluation runs cannot be cancelled from this screen.
+- A due reminder run is claimed atomically before work starts. Its run identifier is
+  also the reminder identifier, so concurrent workers converge on one reminder.
+- Completed or dismissed reminders are never reopened by automation replay.
+- Browser-local interview times are converted to absolute ISO instants before they
+  reach the server, so reminder timing does not depend on the deployment region.
+
+## Demo account behavior
+
+- Local demo mode has no authentication account and therefore no password to
+  update. The account page explains this instead of reporting a false success.
+- Configuring Supabase enables the real password form and owner-scoped account data.

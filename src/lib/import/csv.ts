@@ -53,6 +53,8 @@ export interface CsvJobValidationError {
 
 export interface CsvJobImportResult {
   jobs: JobCreateInput[];
+  /** Physical one-based CSV row where each valid job record starts. */
+  jobRows: number[];
   errors: CsvJobValidationError[];
   /** Count of non-empty data rows, including invalid rows. */
   totalRows: number;
@@ -153,7 +155,7 @@ const EMPLOYMENT_VALUES: Readonly<Record<string, EmploymentType>> = {
   unknown: "unspecified",
 };
 
-const VALUE_LIMITS: Readonly<Partial<Record<JobColumn, number>>> = {
+export const CSV_JOB_VALUE_LIMITS = {
   title: 300,
   company: 300,
   description: 500_000,
@@ -162,7 +164,13 @@ const VALUE_LIMITS: Readonly<Partial<Record<JobColumn, number>>> = {
   externalId: 512,
   salaryCurrency: 3,
   publishedAt: 100,
-};
+} as const satisfies Readonly<Partial<Record<JobColumn, number>>>;
+
+interface ParsedCsvRow {
+  values: string[];
+  /** Physical one-based line where this logical CSV record starts. */
+  sourceRow: number;
+}
 
 function positiveLimit(value: number | undefined, fallback: number, allowZero = false): number {
   if (value === undefined) return fallback;
@@ -179,14 +187,15 @@ function utf8Length(value: string): number {
 function parseCsvDocument(
   csv: string,
   limits: { maxColumns: number; maxFieldLength: number },
-): string[][] {
-  const rows: string[][] = [];
+): ParsedCsvRow[] {
+  const rows: ParsedCsvRow[] = [];
   let row: string[] = [];
   let field = "";
   let inQuotes = false;
   let afterQuote = false;
   let physicalRow = 1;
   let physicalColumn = 0;
+  let sourceRow = 1;
 
   const append = (character: string) => {
     field += character;
@@ -212,7 +221,7 @@ function parseCsvDocument(
 
   const pushRow = () => {
     pushField();
-    rows.push(row);
+    rows.push({ values: row, sourceRow });
     row = [];
   };
 
@@ -249,6 +258,7 @@ function parseCsvDocument(
         pushRow();
         physicalRow += 1;
         physicalColumn = 0;
+        sourceRow = physicalRow;
       } else if (character !== " " && character !== "\t") {
         throw new CsvImportError(
           "malformed_csv",
@@ -266,6 +276,7 @@ function parseCsvDocument(
       pushRow();
       physicalRow += 1;
       physicalColumn = 0;
+      sourceRow = physicalRow;
     } else if (character === '"') {
       if (field.length !== 0) {
         throw new CsvImportError("malformed_csv", "Unexpected quote in an unquoted CSV field", {
@@ -374,7 +385,7 @@ function validateJobRow(
   if (!company) addError("company", "required", "Company is required");
   if (!description) addError("description", "required", "Job description is required");
 
-  for (const [field, limit] of Object.entries(VALUE_LIMITS) as [JobColumn, number][]) {
+  for (const [field, limit] of Object.entries(CSV_JOB_VALUE_LIMITS) as [JobColumn, number][]) {
     const fieldValue = value(field);
     if (fieldValue.length > limit) {
       addError(field, "too_long", `${field} must be at most ${limit} characters`);
@@ -474,25 +485,33 @@ export function parseJobsCsv(csv: string, options: CsvJobImportOptions = {}): Cs
   }
 
   const parsedRows = parseCsvDocument(csv, { maxColumns, maxFieldLength });
-  const firstNonEmpty = parsedRows.findIndex((row) => !isEmptyRow(row));
+  const firstNonEmpty = parsedRows.findIndex((row) => !isEmptyRow(row.values));
   if (firstNonEmpty === -1) throw new CsvImportError("empty_csv", "CSV is empty");
 
-  const header = parsedRows[firstNonEmpty];
+  const header = parsedRows[firstNonEmpty].values;
   const columns = createHeaderMap(header);
-  const dataRows = parsedRows.slice(firstNonEmpty + 1).filter((row) => !isEmptyRow(row));
+  const dataRows = parsedRows
+    .slice(firstNonEmpty + 1)
+    .filter((row) => !isEmptyRow(row.values));
   if (dataRows.length > maxRows) {
     throw new CsvImportError("too_many_rows", `CSV exceeds the ${maxRows}-row limit`);
   }
 
   const jobs: JobCreateInput[] = [];
+  const jobRows: number[] = [];
   const errors: CsvJobValidationError[] = [];
-  for (let index = 0; index < dataRows.length; index += 1) {
-    // `firstNonEmpty` accounts for optional leading blank lines. Embedded newlines
-    // do not affect the logical import row number presented to users.
-    const csvRow = firstNonEmpty + index + 2;
-    const validated = validateJobRow(dataRows[index], csvRow, header.length, columns);
-    if (validated.job) jobs.push(validated.job);
+  for (const dataRow of dataRows) {
+    const validated = validateJobRow(
+      dataRow.values,
+      dataRow.sourceRow,
+      header.length,
+      columns,
+    );
+    if (validated.job) {
+      jobs.push(validated.job);
+      jobRows.push(dataRow.sourceRow);
+    }
     errors.push(...validated.errors);
   }
-  return { totalRows: dataRows.length, jobs, errors };
+  return { totalRows: dataRows.length, jobs, jobRows, errors };
 }

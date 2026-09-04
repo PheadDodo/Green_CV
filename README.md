@@ -38,11 +38,12 @@ Main routes:
 
 - `/dashboard` — metrics, charts, actionable reminders, activity, and next actions
 - `/applications` — searchable open and closed application pipeline
-- `/applications/:id` — job brief, source description, CV, and interaction history
+- `/applications/:id` — job brief, source description, CV, interaction history, and owner-controlled deletion
 - `/applications/:id/evaluation` — versioned fit evidence, gaps, and safe CV edits
 - `/cvs` — upload, select or unselect, privately preview, ATS-check, download, or delete CVs
-- `/imports` — CSV import and SSRF-safe public job URL previews
-- `/settings/automation` — persisted rules, run history, retries, and cancellation
+- `/imports` — deletable audit history for CSV batches (up to 100 rows) and SSRF-safe public job URL previews
+- `/settings/automation` — editable reminder timing, run history, retries, and safe cancellation
+- `/settings/account` — password and account-security controls
 
 ## Configure PostgreSQL and accounts
 
@@ -60,7 +61,7 @@ The publishable key is safe for the browser. The secret key bypasses Row Level
 Security and must exist only in local/deployment environment settings—never in Git
 and never in a variable beginning with `NEXT_PUBLIC_`.
 
-Apply the checked-in PostgreSQL migration:
+Apply the checked-in PostgreSQL migrations:
 
 ```powershell
 npx.cmd supabase login
@@ -69,7 +70,7 @@ npx.cmd supabase db push --dry-run
 npx.cmd supabase db push
 ```
 
-The migration creates nine user-owned tables, constraints, workflow functions,
+The migrations create nine user-owned tables, constraints, workflow functions,
 forced Row Level Security policies, default automation rules, and the private
 `cv-files` Storage bucket. CV objects use opaque owner-scoped paths and share the
 application's 4 MB upload limit.

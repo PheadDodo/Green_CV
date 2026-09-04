@@ -1,8 +1,19 @@
 import { createAutomationEngine } from "@/lib/automation/engine";
 import { createAutoEvaluationRule, createFollowUpReminderRule, createInterviewPrepRule } from "@/lib/automation/rules";
-import type { AutomationIntent, AutomationRule as EngineRule } from "@/lib/automation/types";
-import type { DataRepository } from "@/lib/data/repository";
-import type { ApplicationRecord, AutomationRule as StoredRule } from "@/lib/data/types";
+import type {
+  AutomationIntent,
+  AutomationRule as EngineRule,
+  EvaluationAutomationIntent,
+  ReminderAutomationIntent,
+} from "@/lib/automation/types";
+import { DataConflictError, type DataRepository } from "@/lib/data/repository";
+import {
+  MAX_AUTOMATION_RUN_ATTEMPTS,
+  REMINDER_AUTOMATION_RUN_LEASE_MS,
+  type ApplicationRecord,
+  type AutomationRule as StoredRule,
+  type AutomationRun,
+} from "@/lib/data/types";
 import { evaluateApplication } from "./evaluate-application";
 
 const typeByEngineId = {
@@ -36,7 +47,27 @@ function nextRetry(attempts: number) {
   return new Date(Date.now() + Math.min(15 * 60_000, 30_000 * 2 ** Math.max(0, attempts - 1))).toISOString();
 }
 
-async function executeIntent(repository: DataRepository, rules: StoredRule[], intent: AutomationIntent) {
+function shouldSkipReminderRun(run: AutomationRun) {
+  if (run.status === "succeeded" || run.status === "cancelled") {
+    return true;
+  }
+  if (run.status === "running") {
+    if (run.attempts >= MAX_AUTOMATION_RUN_ATTEMPTS) return true;
+    const startedAt = Date.parse(run.startedAt ?? "");
+    return Number.isFinite(startedAt)
+      && startedAt > Date.now() - REMINDER_AUTOMATION_RUN_LEASE_MS;
+  }
+  return run.status === "failed" && (
+    run.attempts >= MAX_AUTOMATION_RUN_ATTEMPTS
+    || new Date(run.scheduledAt).getTime() > Date.now()
+  );
+}
+
+async function executeEvaluationIntent(
+  repository: DataRepository,
+  rules: StoredRule[],
+  intent: EvaluationAutomationIntent,
+) {
   const type = typeByEngineId[intent.ruleId as keyof typeof typeByEngineId];
   const rule = rules.find(item => item.type === type) ?? null;
   let run = await repository.getAutomationRunByIdempotencyKey(intent.idempotencyKey);
@@ -45,17 +76,91 @@ async function executeIntent(repository: DataRepository, rules: StoredRule[], in
   if (!run) run = await repository.createAutomationRun({ ruleId: rule?.id, applicationId: intent.applicationId, type, idempotencyKey: intent.idempotencyKey, status: "pending", scheduledAt: intent.availableAt });
   run = await repository.updateAutomationRun(run.id, { status: "running", attempts: run.attempts + 1, startedAt: new Date().toISOString(), errorMessage: null });
   try {
-    if (intent.action === "reminder.create") {
-      await repository.upsertReminder({ applicationId: intent.applicationId, title: intent.payload.title, notes: intent.payload.notes, dueAt: intent.payload.dueAt });
-    } else {
-      await evaluateApplication(repository, intent.applicationId);
-    }
+    await evaluateApplication(repository, intent.applicationId);
     run = await repository.updateAutomationRun(run.id, { status: "succeeded", completedAt: new Date().toISOString() });
     return { status: "succeeded" as const, run };
   } catch (error) {
     run = await repository.updateAutomationRun(run.id, { status: "failed", errorMessage: error instanceof Error ? error.message : "Automation failed.", scheduledAt: nextRetry(run.attempts), completedAt: new Date().toISOString() });
     return { status: "failed" as const, run };
   }
+}
+
+async function createOrReloadReminderRun(
+  repository: DataRepository,
+  rules: StoredRule[],
+  intent: ReminderAutomationIntent,
+) {
+  const existing = await repository.getAutomationRunByIdempotencyKey(intent.idempotencyKey);
+  if (existing) return existing;
+
+  const type = typeByEngineId[intent.ruleId as keyof typeof typeByEngineId];
+  const rule = rules.find(item => item.type === type) ?? null;
+  try {
+    return await repository.createAutomationRun({
+      ruleId: rule?.id,
+      applicationId: intent.applicationId,
+      type,
+      idempotencyKey: intent.idempotencyKey,
+      status: "pending",
+      scheduledAt: intent.availableAt,
+    });
+  } catch (error) {
+    if (!(error instanceof DataConflictError)) throw error;
+    const winner = await repository.getAutomationRunByIdempotencyKey(intent.idempotencyKey);
+    if (!winner) throw error;
+    return winner;
+  }
+}
+
+async function executeReminderIntent(
+  repository: DataRepository,
+  rules: StoredRule[],
+  intent: ReminderAutomationIntent,
+) {
+  let run = await createOrReloadReminderRun(repository, rules, intent);
+  if (shouldSkipReminderRun(run)) return { status: "skipped" as const, run };
+
+  const claimed = await repository.claimAutomationRun(run.id, {
+    expectedAttempts: run.attempts,
+    startedAt: new Date().toISOString(),
+  });
+  if (!claimed) {
+    run = (await repository.getAutomationRun(run.id)) ?? run;
+    return { status: "skipped" as const, run };
+  }
+
+  run = claimed;
+  try {
+    await repository.ensureAutomationReminder(run.id, {
+      applicationId: intent.applicationId,
+      title: intent.payload.title,
+      notes: intent.payload.notes,
+      dueAt: intent.payload.dueAt,
+    });
+    run = await repository.updateAutomationRun(run.id, {
+      status: "succeeded",
+      completedAt: new Date().toISOString(),
+    });
+    return { status: "succeeded" as const, run };
+  } catch (error) {
+    run = await repository.updateAutomationRun(run.id, {
+      status: "failed",
+      errorMessage: error instanceof Error ? error.message : "Automation failed.",
+      scheduledAt: nextRetry(run.attempts),
+      completedAt: new Date().toISOString(),
+    });
+    return { status: "failed" as const, run };
+  }
+}
+
+function executeIntent(
+  repository: DataRepository,
+  rules: StoredRule[],
+  intent: AutomationIntent,
+) {
+  return intent.action === "reminder.create"
+    ? executeReminderIntent(repository, rules, intent)
+    : executeEvaluationIntent(repository, rules, intent);
 }
 
 export async function runAutomations(repository: DataRepository, userId: string) {

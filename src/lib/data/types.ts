@@ -68,6 +68,8 @@ export const AUTOMATION_RUN_STATUSES = [
   "cancelled",
 ] as const;
 export type AutomationRunStatus = (typeof AUTOMATION_RUN_STATUSES)[number];
+export const MAX_AUTOMATION_RUN_ATTEMPTS = 4;
+export const REMINDER_AUTOMATION_RUN_LEASE_MS = 5 * 60_000;
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -322,6 +324,13 @@ export interface ReminderUpsertInput {
   status?: ReminderStatus;
 }
 
+export interface AutomationReminderCreateInput {
+  applicationId: string;
+  title: string;
+  notes?: string | null;
+  dueAt: string;
+}
+
 export interface ImportBatchCreateInput {
   source: JobSource;
   fileName?: string | null;
@@ -360,6 +369,11 @@ export interface AutomationRunCreateInput {
   scheduledAt?: string;
   startedAt?: string | null;
   completedAt?: string | null;
+}
+
+export interface AutomationRunClaimInput {
+  expectedAttempts: number;
+  startedAt?: string;
 }
 
 export type AutomationRunUpdateInput = Partial<

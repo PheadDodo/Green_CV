@@ -7,6 +7,10 @@ import {
   DataNotFoundError,
   type DataRepository,
 } from "./repository";
+import {
+  MAX_AUTOMATION_RUN_ATTEMPTS,
+  REMINDER_AUTOMATION_RUN_LEASE_MS,
+} from "./types";
 import type {
   Application,
   ApplicationEvent,
@@ -16,7 +20,9 @@ import type {
   ApplicationStatus,
   AutomationRule,
   AutomationRuleUpsertInput,
+  AutomationReminderCreateInput,
   AutomationRun,
+  AutomationRunClaimInput,
   AutomationRunCreateInput,
   AutomationRunListOptions,
   AutomationRunUpdateInput,
@@ -255,6 +261,46 @@ function toAutomationRun(row: AutomationRunRow): AutomationRun {
   };
 }
 
+function toImportedApplicationRecord(value: Json, userId: string): ApplicationRecord {
+  if (!value || Array.isArray(value) || typeof value !== "object") {
+    throw new Error("Supabase returned an invalid imported application.");
+  }
+  const payload = value as Record<string, Json | undefined>;
+  if (
+    !payload.application
+    || Array.isArray(payload.application)
+    || typeof payload.application !== "object"
+    || !payload.job
+    || Array.isArray(payload.job)
+    || typeof payload.job !== "object"
+    || !Array.isArray(payload.events)
+  ) {
+    throw new Error("Supabase returned an invalid imported application.");
+  }
+
+  const application = toApplication(payload.application as unknown as ApplicationRow);
+  const job = toJob(payload.job as unknown as JobRow);
+  const events = (payload.events as unknown as EventRow[]).map(toEvent);
+  if (
+    application.userId !== userId
+    || job.userId !== userId
+    || application.jobId !== job.id
+    || events.some((event) =>
+      event.userId !== userId || event.applicationId !== application.id
+    )
+  ) {
+    throw new Error("Supabase returned an invalid imported application owner.");
+  }
+
+  return {
+    ...application,
+    job,
+    cvVersion: null,
+    latestEvaluation: null,
+    events,
+  };
+}
+
 function throwQueryError(error: { message: string; code?: string } | null): void {
   if (!error) return;
   if (error.code === "23505") throw new DataConflictError(error.message);
@@ -385,6 +431,20 @@ export class SupabaseDataRepository implements DataRepository {
     return application;
   }
 
+  private async createImportedApplication(
+    input: CreateApplicationInput,
+    batchId: string,
+  ): Promise<ApplicationRecord> {
+    const { data, error } = await this.client.rpc("create_imported_application", {
+      p_job: json(input.job),
+      p_application: json(input.application ?? {}),
+      p_batch_id: batchId,
+    });
+    throwQueryError(error);
+    if (!data) throw new Error("Supabase did not return the imported application.");
+    return toImportedApplicationRecord(data, this.userId);
+  }
+
   async bulkCreateApplications(
     inputs: CreateApplicationInput[],
     batchId?: string,
@@ -394,22 +454,24 @@ export class SupabaseDataRepository implements DataRepository {
       if (!batches.some((batch) => batch.id === batchId)) {
         throw new DataNotFoundError("Import batch", batchId);
       }
-      await this.updateImportBatch(batchId, { status: "processing", totalRows: inputs.length });
+      await this.updateImportBatch(batchId, {
+        status: "processing",
+        totalRows: inputs.length,
+        processedRows: 0,
+        succeededRows: 0,
+        failedRows: 0,
+        errors: [],
+        completedAt: null,
+      });
     }
     const applications: ApplicationRecord[] = [];
     const errors: ImportError[] = [];
     for (let index = 0; index < inputs.length; index += 1) {
       try {
-        const application = await this.createApplication(inputs[index]);
+        const application = batchId
+          ? await this.createImportedApplication(inputs[index], batchId)
+          : await this.createApplication(inputs[index]);
         applications.push(application);
-        if (batchId) {
-          await this.createApplicationEvent({
-            applicationId: application.id,
-            type: "imported",
-            title: "Role imported",
-            metadata: { batchId },
-          });
-        }
       } catch (error) {
         errors.push({
           row: index + 1,
@@ -419,6 +481,7 @@ export class SupabaseDataRepository implements DataRepository {
     }
     if (batchId) {
       await this.updateImportBatch(batchId, {
+        totalRows: inputs.length,
         processedRows: inputs.length,
         succeededRows: applications.length,
         failedRows: errors.length,
@@ -470,20 +533,24 @@ export class SupabaseDataRepository implements DataRepository {
   }
 
   async deleteApplication(id: string): Promise<void> {
-    const application = await this.getApplication(id);
-    if (!application) throw new DataNotFoundError("Application", id);
-    const { error: applicationError } = await this.client
+    const { data: application, error: lookupError } = await this.client
       .from("applications")
-      .delete()
+      .select("job_id")
       .eq("id", id)
-      .eq("user_id", this.userId);
-    throwQueryError(applicationError);
-    const { error: jobError } = await this.client
+      .eq("user_id", this.userId)
+      .maybeSingle();
+    throwQueryError(lookupError);
+    if (!application) throw new DataNotFoundError("Application", id);
+
+    const { data: deletedJob, error: jobError } = await this.client
       .from("jobs")
       .delete()
-      .eq("id", application.jobId)
-      .eq("user_id", this.userId);
+      .eq("id", application.job_id)
+      .eq("user_id", this.userId)
+      .select("id")
+      .maybeSingle();
     throwQueryError(jobError);
+    if (!deletedJob) throw new DataNotFoundError("Application", id);
   }
 
   async listJobs(): Promise<Job[]> {
@@ -732,6 +799,17 @@ export class SupabaseDataRepository implements DataRepository {
     return (data ?? []).map(toReminder);
   }
 
+  private async getReminder(id: string): Promise<Reminder | null> {
+    const { data, error } = await this.client
+      .from("reminders")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", this.userId)
+      .maybeSingle();
+    throwQueryError(error);
+    return data ? toReminder(data) : null;
+  }
+
   async upsertReminder(input: ReminderUpsertInput): Promise<Reminder> {
     const payload: Database["public"]["Tables"]["reminders"]["Insert"] = {
       ...(input.id ? { id: input.id } : {}),
@@ -778,6 +856,53 @@ export class SupabaseDataRepository implements DataRepository {
       .maybeSingle();
     throwQueryError(error);
     if (!data) return this.getTerminalReminder(id, "dismissed");
+    return toReminder(data);
+  }
+
+  async ensureAutomationReminder(
+    runId: string,
+    input: AutomationReminderCreateInput,
+  ): Promise<Reminder> {
+    const run = await this.getAutomationRun(runId);
+    if (!run) throw new DataNotFoundError("Automation run", runId);
+    const existing = await this.getReminder(runId);
+    if (existing) {
+      if (existing.applicationId !== input.applicationId) {
+        throw new DataConflictError("The automation reminder identity is already in use.");
+      }
+      return existing;
+    }
+    if (run.type !== "follow_up" && run.type !== "interview_prep") {
+      throw new DataConflictError("This automation run does not create a reminder.");
+    }
+    if (run.status !== "running") {
+      throw new DataConflictError("The automation run must be running before creating a reminder.");
+    }
+    if (run.applicationId !== input.applicationId) {
+      throw new DataConflictError("The reminder application does not match its automation run.");
+    }
+    if (!input.title.trim()) throw new DataConflictError("A reminder requires a title.");
+    const payload: Database["public"]["Tables"]["reminders"]["Insert"] = {
+      id: runId,
+      user_id: this.userId,
+      application_id: input.applicationId,
+      title: input.title.trim(),
+      notes: input.notes?.trim() || null,
+      due_at: input.dueAt,
+      status: "pending",
+      completed_at: null,
+    };
+    const { data, error } = await this.client
+      .from("reminders")
+      .insert(payload)
+      .select("*")
+      .maybeSingle();
+    if (error?.code === "23505") {
+      const concurrent = await this.getReminder(runId);
+      if (concurrent?.applicationId === input.applicationId) return concurrent;
+    }
+    throwQueryError(error);
+    if (!data) throw new Error("Supabase did not return the automation reminder.");
     return toReminder(data);
   }
 
@@ -845,6 +970,18 @@ export class SupabaseDataRepository implements DataRepository {
     return toImportBatch(data);
   }
 
+  async deleteImportBatch(id: string): Promise<void> {
+    const { data, error } = await this.client
+      .from("import_batches")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", this.userId)
+      .select("id")
+      .maybeSingle();
+    throwQueryError(error);
+    if (!data) throw new DataNotFoundError("Import batch", id);
+  }
+
   async listAutomationRules(): Promise<AutomationRule[]> {
     const { data, error } = await this.client
       .from("automation_rules")
@@ -904,6 +1041,17 @@ export class SupabaseDataRepository implements DataRepository {
     return (data ?? []).map(toAutomationRun);
   }
 
+  async getAutomationRun(id: string): Promise<AutomationRun | null> {
+    const { data, error } = await this.client
+      .from("automation_runs")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", this.userId)
+      .maybeSingle();
+    throwQueryError(error);
+    return data ? toAutomationRun(data) : null;
+  }
+
   async getAutomationRunByIdempotencyKey(
     idempotencyKey: string,
   ): Promise<AutomationRun | null> {
@@ -941,6 +1089,63 @@ export class SupabaseDataRepository implements DataRepository {
     throwQueryError(error);
     if (!data) throw new Error("Supabase did not return the automation run.");
     return toAutomationRun(data);
+  }
+
+  async claimAutomationRun(
+    id: string,
+    input: AutomationRunClaimInput,
+  ): Promise<AutomationRun | null> {
+    if (!Number.isSafeInteger(input.expectedAttempts) || input.expectedAttempts < 0) {
+      throw new DataConflictError("Expected attempts must be a non-negative integer.");
+    }
+    const startedTimestamp = Date.parse(input.startedAt ?? new Date().toISOString());
+    if (!Number.isFinite(startedTimestamp)) {
+      throw new DataConflictError("A valid automation start time is required.");
+    }
+    const startedAt = new Date(startedTimestamp).toISOString();
+    const leaseCutoff = new Date(
+      startedTimestamp - REMINDER_AUTOMATION_RUN_LEASE_MS,
+    ).toISOString();
+    const { data, error } = await this.client
+      .from("automation_runs")
+      .update({
+        status: "running",
+        attempts: input.expectedAttempts + 1,
+        started_at: startedAt,
+        completed_at: null,
+        error_message: null,
+      })
+      .eq("id", id)
+      .eq("user_id", this.userId)
+      .eq("attempts", input.expectedAttempts)
+      .lt("attempts", MAX_AUTOMATION_RUN_ATTEMPTS)
+      .lte("scheduled_at", startedAt)
+      .or(
+        `status.in.(pending,failed),and(status.eq.running,type.in.(follow_up,interview_prep),started_at.is.null),and(status.eq.running,type.in.(follow_up,interview_prep),started_at.lte.${leaseCutoff})`,
+      )
+      .select("*")
+      .maybeSingle();
+    throwQueryError(error);
+    return data ? toAutomationRun(data) : null;
+  }
+
+  async cancelAutomationRun(id: string): Promise<AutomationRun> {
+    const timestamp = new Date().toISOString();
+    const { data, error } = await this.client
+      .from("automation_runs")
+      .update({ status: "cancelled", completed_at: timestamp })
+      .eq("id", id)
+      .eq("user_id", this.userId)
+      .in("status", ["pending", "failed"])
+      .lt("attempts", MAX_AUTOMATION_RUN_ATTEMPTS)
+      .select("*")
+      .maybeSingle();
+    throwQueryError(error);
+    if (data) return toAutomationRun(data);
+    const existing = await this.getAutomationRun(id);
+    if (!existing) throw new DataNotFoundError("Automation run", id);
+    if (existing.status === "cancelled") return existing;
+    throw new DataConflictError("This automation run cannot be cancelled.");
   }
 
   async updateAutomationRun(

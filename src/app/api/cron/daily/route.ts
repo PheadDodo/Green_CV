@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       results.push(await runAutomations(repository, userId));
     }
     return NextResponse.json({ users: userIds.length, results });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Scheduled automation failed." }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Scheduled automation failed." }, { status: 500 });
   }
 }

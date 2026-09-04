@@ -8,10 +8,19 @@ import { Button } from "./ui";
 
 type CvChoice = Pick<CvVersion, "id" | "name" | "isDefault">;
 
+async function responseBody(response: Response): Promise<Record<string, unknown>> {
+  try {
+    return await response.json() as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 export function AddRoleDialog({ cvs = [], label = "Add role" }: { cvs?: CvChoice[]; label?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -22,22 +31,34 @@ export function AddRoleDialog({ cvs = [], label = "Add role" }: { cvs?: CvChoice
 
   async function submit(formData: FormData) {
     setError("");
-    const payload = Object.fromEntries(formData.entries());
-    const response = await fetch("/api/applications", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const body = await response.json();
-    if (!response.ok) {
-      setError(body.error ?? "Could not save this role.");
-      return;
+    setSubmitting(true);
+    try {
+      const payload = Object.fromEntries(formData.entries());
+      const response = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const body = await responseBody(response);
+      if (!response.ok) {
+        setError(typeof body.error === "string" ? body.error : "Could not save this role. Please try again.");
+        return;
+      }
+      const application = body.application;
+      if (!application || typeof application !== "object" || !("id" in application) || typeof application.id !== "string") {
+        setError("Could not save this role. Please try again.");
+        return;
+      }
+      setOpen(false);
+      startTransition(() => {
+        router.push(`/applications/${application.id}`);
+        router.refresh();
+      });
+    } catch {
+      setError("Could not save this role. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
-    setOpen(false);
-    startTransition(() => {
-      router.push(`/applications/${body.application.id}`);
-      router.refresh();
-    });
   }
 
   return <>
@@ -52,12 +73,12 @@ export function AddRoleDialog({ cvs = [], label = "Add role" }: { cvs?: CvChoice
           <div className="field"><label htmlFor="location">Location</label><input id="location" name="location" placeholder="Remote, Europe" /></div>
           <div className="field"><label htmlFor="sourceUrl">Source URL</label><input id="sourceUrl" name="sourceUrl" type="url" placeholder="https://…" /></div>
           <div className="field"><label htmlFor="workplaceType">Workplace</label><select id="workplaceType" name="workplaceType" defaultValue="unspecified"><option value="unspecified">Unspecified</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">On-site</option></select></div>
-          <div className="field"><label htmlFor="employmentType">Employment</label><select id="employmentType" name="employmentType" defaultValue="full_time"><option value="full_time">Full-time</option><option value="part_time">Part-time</option><option value="contract">Contract</option><option value="internship">Internship</option></select></div>
+          <div className="field"><label htmlFor="employmentType">Employment</label><select id="employmentType" name="employmentType" defaultValue="full_time"><option value="full_time">Full-time</option><option value="part_time">Part-time</option><option value="contract">Contract</option><option value="internship">Internship</option><option value="temporary">Temporary</option><option value="unspecified">Unspecified</option></select></div>
           <div className="field fieldFull"><label htmlFor="description">Job description snapshot</label><textarea id="description" name="description" required minLength={20} placeholder="Paste the complete job description…" /><small>This snapshot becomes the authoritative source for future evaluations.</small></div>
           <div className="field"><label htmlFor="status">Starting status</label><select id="status" name="status" defaultValue="saved"><option value="saved">Saved</option><option value="applied">Applied</option><option value="screening">Screening</option></select></div>
           <div className="field"><label htmlFor="cvVersionId">Attach CV version</label><select id="cvVersionId" name="cvVersionId" defaultValue={cvs.find(cv => cv.isDefault)?.id ?? ""}><option value="">Attach later</option>{cvs.map(cv => <option key={cv.id} value={cv.id}>{cv.name}</option>)}</select></div>
         </div>
-        <div className="dialogActions"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={pending}>{pending ? "Opening…" : "Save role"}</Button></div>
+        <div className="dialogActions"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={submitting || pending}>{submitting ? "Saving…" : pending ? "Opening…" : "Save role"}</Button></div>
       </form>
     </div>}
   </>;

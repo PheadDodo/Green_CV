@@ -1,17 +1,69 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth";
-import { getDataRepository } from "@/lib/data";
-import { AUTOMATION_RULE_TYPES } from "@/lib/data/types";
 
-const schema = z.object({ id: z.string().uuid().optional(), type: z.enum(AUTOMATION_RULE_TYPES), enabled: z.boolean(), config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional() });
+import { AuthRequiredError, requireUser } from "@/lib/auth";
+import {
+  DataConflictError,
+  DataNotFoundError,
+  getDataRepository,
+} from "@/lib/data";
+
+const identity = {
+  id: z.string().uuid().optional(),
+  enabled: z.boolean(),
+};
+
+const schema = z.discriminatedUnion("type", [
+  z.object({
+    ...identity,
+    type: z.literal("auto_evaluate"),
+  }).strict(),
+  z.object({
+    ...identity,
+    type: z.literal("follow_up"),
+    config: z.object({
+      delayHours: z.number().int().min(1).max(720),
+    }).strict().optional(),
+  }).strict(),
+  z.object({
+    ...identity,
+    type: z.literal("interview_prep"),
+    config: z.object({
+      leadHours: z.number().int().min(1).max(168),
+    }).strict().optional(),
+  }).strict(),
+]);
 
 export async function PATCH(request: Request) {
   try {
-    const [user, input] = await Promise.all([requireUser(), request.json().then(value => schema.parse(value))]);
+    const user = await requireUser();
+    const parsed = schema.safeParse(await request.json().catch(() => undefined));
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid automation rule settings." },
+        { status: 400 },
+      );
+    }
+
     const repository = await getDataRepository({ userId: user.id });
-    return NextResponse.json({ rule: await repository.upsertAutomationRule(input) });
+    const rule = await repository.upsertAutomationRule(parsed.data);
+    return NextResponse.json({ rule });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update rule." }, { status: 400 });
+    if (error instanceof AuthRequiredError) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+    if (error instanceof DataNotFoundError) {
+      return NextResponse.json({ error: "Automation rule not found." }, { status: 404 });
+    }
+    if (error instanceof DataConflictError) {
+      return NextResponse.json(
+        { error: "Automation rule conflicts with existing settings." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json(
+      { error: "Could not update automation rule." },
+      { status: 500 },
+    );
   }
 }

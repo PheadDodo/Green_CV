@@ -304,6 +304,10 @@ export type Database = {
     };
     Views: Record<never, never>;
     Functions: {
+      create_imported_application: {
+        Args: { p_job: Json; p_application: Json; p_batch_id: string };
+        Returns: Json;
+      };
       create_application_with_job: {
         Args: { p_job: Json; p_application?: Json };
         Returns: string;
