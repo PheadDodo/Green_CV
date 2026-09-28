@@ -4,6 +4,10 @@ import path from "node:path";
 export const LOCAL_CV_FILE_ROOT = path.join(process.cwd(), ".data", "cv-files");
 export type CvFileExtension = "pdf" | "docx" | "md" | "txt";
 
+function configuredLocalCvRoot(): string {
+  return process.env.JOBS_SUMMARY_LOCAL_CV_ROOT || LOCAL_CV_FILE_ROOT;
+}
+
 function safeSegment(value: string, label: string): string {
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(value)) throw new Error(`Invalid ${label}.`);
   return value;
@@ -17,7 +21,7 @@ export function createCvStoragePath(
   return `${safeSegment(userId, "user id")}/${safeSegment(id, "file id")}/original.${extension}`;
 }
 
-export function resolveLocalCvFile(storagePath: string, root = LOCAL_CV_FILE_ROOT): string {
+export function resolveLocalCvFile(storagePath: string, root = configuredLocalCvRoot()): string {
   if (storagePath.includes("\\")) throw new Error("Invalid CV storage path.");
   const segments = storagePath.split("/");
   if (segments.length !== 3) throw new Error("Invalid CV storage path.");
@@ -41,7 +45,7 @@ export async function saveLocalCvFile(input: {
   root?: string;
   id?: string;
 }): Promise<string> {
-  const root = input.root ?? LOCAL_CV_FILE_ROOT;
+  const root = input.root ?? configuredLocalCvRoot();
   const storagePath = createCvStoragePath(input.userId, input.extension, input.id);
   const filePath = resolveLocalCvFile(storagePath, root);
   await mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
@@ -49,11 +53,11 @@ export async function saveLocalCvFile(input: {
   return storagePath;
 }
 
-export async function readLocalCvFile(storagePath: string, root = LOCAL_CV_FILE_ROOT): Promise<Buffer> {
+export async function readLocalCvFile(storagePath: string, root = configuredLocalCvRoot()): Promise<Buffer> {
   return readFile(resolveLocalCvFile(storagePath, root));
 }
 
-export async function removeLocalCvFile(storagePath: string, root = LOCAL_CV_FILE_ROOT): Promise<void> {
+export async function removeLocalCvFile(storagePath: string, root = configuredLocalCvRoot()): Promise<void> {
   const filePath = resolveLocalCvFile(storagePath, root);
   await unlink(filePath).catch((error: unknown) => {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;

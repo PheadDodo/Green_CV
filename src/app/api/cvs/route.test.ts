@@ -34,6 +34,13 @@ function positionedWordsPdf(): ArrayBuffer {
   return bytes;
 }
 
+function fictionalDocx(): ArrayBuffer {
+  // Minimal DOCX containing only fictional CV paragraphs, including split text
+  // runs and XML-escaped characters. No Office metadata or personal document.
+  const encoded = "UEsDBAoAAAAIAAAAIVD3VP4j2QAAAGQBAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbJWQu1LDMBBFf0WjlrHWUDAMYzsFjxIowgfsyGtbg16jVUL4e9YJSZGOUrpn75G22xyCV3sq7FLs9a1ptaJo0+ji3OvP7WvzoDdDt/3JxErQyL1eas2PAGwXCsgmZYqSTKkErHIsM2S0XzgT3LXtPdgUK8Xa1LVDD90zTbjzVb0c5PqkLeRZq6cTuLp6jTl7Z7FKDvs4XlmaP4ORySPDi8t8I4CGoXuX/xQ3kvrAUt8wSB18pzLCmOwuiMKs4L98aZqcpcv82pZLssQsiwreXJKALp7fAce1Db9QSwMECgAAAAgAAAAhUDZX3tyiAAAAGAEAAAsAAABfcmVscy8ucmVsc43POw7CMAwG4KtE3qkLA0KoaReE1BWVA0SJm0Y0DyXhdXsyMFDEwGj792e56R52ZjeKyXjHYV3VwMhJr4zTHM7DcbWDrm1ONItcEmkyIbGy4hKHKeewR0xyIitS5QO5Mhl9tCKXMmoMQl6EJtzU9RbjpwFLk/WKQ+zVGtjwDPSP7cfRSDp4ebXk8o8TX4kii6gpc7j7qFC921VhAdsGFy+2L1BLAwQKAAAACAAAACFQf5+XJPsAAADJAQAAEQAAAHdvcmQvZG9jdW1lbnQueG1shZFbS8QwEIX/ypCHvtlUH0R6W3SpsFh03Sr4mm3HNpAbSXa7++9NBBVF6MsZJnPyTTgpVycp4IjWca0qcplmBFD1euBqrMjry/3FDVnV5ZwPuj9IVB6CX7l8rsjkvckpdf2EkrlUG1Rh9q6tZD60dqSztoOxukfnAk4KepVl11QyrkhE7vVwjtVEsVF8fSvwBM2JSSOwpPEkqv1U89e8fto10D1s2rZb9G7PftIKkkAuoHtuIRG+GJhnyegL8FoLt8ho3rbNbtM8rpsla0wpd4b1WBFj0aE9IqnvDlx4+HX3m21RcLYXCPFNYLgJvUKX/rOJfkVHf76l/gBQSwECFAAKAAAACAAAACFQ91T+I9kAAABkAQAAEwAAAAAAAAAAAAAAAAAAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAAoAAAAIAAAAIVA2V97cogAAABgBAAALAAAAAAAAAAAAAAAAAAoBAABfcmVscy8ucmVsc1BLAQIUAAoAAAAIAAAAIVB/n5ck+wAAAMkBAAARAAAAAAAAAAAAAAAAANUBAAB3b3JkL2RvY3VtZW50LnhtbFBLBQYAAAAAAwADALkAAAD/AgAAAAA=";
+  return Uint8Array.from(Buffer.from(encoded, "base64")).buffer;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireUser.mockResolvedValue({ id: "demo-user" });
@@ -43,6 +50,32 @@ beforeEach(() => {
 });
 
 describe("POST /api/cvs", () => {
+  it("preserves headings, split runs, and escaped characters in a real DOCX import", async () => {
+    mocks.saveLocalCvFile.mockResolvedValue("demo-user/artifact-id/original.docx");
+    const form = new FormData();
+    form.set("name", "Fictional DOCX CV");
+    form.set("file", new File([fictionalDocx()], "fictional-cv.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }));
+
+    const response = await POST(new Request("http://localhost/api/cvs", {
+      method: "POST",
+      body: form,
+    }));
+
+    expect({ status: response.status, body: await response.json() }).toEqual({
+      status: 201,
+      body: { created: true },
+    });
+    expect(mocks.createCvVersion).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Fictional DOCX CV",
+      content: "Alex Example\n\n## Core Skills\n\nPython & SQL <data> tools\n\n## Experience\n\nBuilt reliable data pipelines.",
+      fileName: "fictional-cv.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      storagePath: "demo-user/artifact-id/original.docx",
+    }));
+  });
+
   it("preserves visual spaces between separately positioned PDF words", async () => {
     const form = new FormData();
     form.set("name", "Data Science CV");

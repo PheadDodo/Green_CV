@@ -1,5 +1,7 @@
 @AGENTS.md
 
+Read [the project workflow](docs/agents/workflow.md) before starting work.
+
 ## Agent skills
 
 ### Issue tracker

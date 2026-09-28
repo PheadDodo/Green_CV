@@ -16,5 +16,5 @@ port = 54323
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+site_url = "http://localhost:4000"
+additional_redirect_urls = ["http://localhost:4000/auth/callback"]

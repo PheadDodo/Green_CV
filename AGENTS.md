@@ -1,3 +1,9 @@
+# GreenCV engineering workflow
+
+Before working on this project, read and follow [the project workflow](docs/agents/workflow.md).
+It records the local-development priority, user-owned work, Matt Pocock skill routing,
+and verification expectations. These instructions apply across coding-model changes.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

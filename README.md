@@ -15,11 +15,17 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-Open <http://localhost:3000/dashboard>. With no environment file, development uses
+Open <http://localhost:4000/dashboard>. With no environment file, development uses
 the persistent demo workspace at `.data/jobs-summary.json` and keeps uploaded CV
 files under `.data/cv-files/`. Both are ignored by Git and must not be used as
 production storage. The development command binds to `127.0.0.1`, so this shared
 demo identity and its private files are not exposed to other devices on your LAN.
+
+GreenCV uses port `4000` for local development because Windows can reserve port
+`3000`, causing `listen EACCES` even when no other server is running. If you change
+the development port, keep `NEXT_PUBLIC_APP_URL` in `.env.local` and the Supabase
+Auth Site URL and callback URLs in sync. For local Supabase, update `[auth]` in
+`supabase/config.toml`, then stop and start the stack without resetting its data.
 
 ## Product workflow
 
@@ -45,7 +51,170 @@ Main routes:
 - `/settings/automation` — editable reminder timing, run history, retries, and safe cancellation
 - `/settings/account` — password and account-security controls
 
-## Configure PostgreSQL and accounts
+## Configure local PostgreSQL and accounts
+
+Local development is the current priority; cloud deployment is a separate, later
+step. Supabase runs PostgreSQL, authentication, and private file storage on your
+machine through Docker. Open Docker Desktop and wait for its **Linux engine** to
+be running. The pinned Supabase CLI is already a project dependency installed by
+`npm.cmd ci`; no global CLI installation is needed.
+See the [Supabase local development guide](https://supabase.com/docs/guides/local-development)
+and [CLI setup guide](https://supabase.com/docs/guides/local-development/cli/getting-started).
+
+From the project folder, create a dedicated network with the requested loopback
+binding **once**:
+
+```powershell
+$env:SUPABASE_TELEMETRY_DISABLED = '1'
+docker network create -o 'com.docker.network.bridge.host_binding_ipv4=127.0.0.1' greencv-local
+```
+
+Start the local stack using that same network on each subsequent session:
+
+```powershell
+$env:SUPABASE_TELEMETRY_DISABLED = '1'
+npx.cmd supabase start --network-id greencv-local
+```
+
+The first startup downloads container images and can take several minutes. The
+network option follows [Supabase's local network guidance](https://supabase.com/docs/guides/local-development),
+but it is **not sufficient proof of localhost-only access on Docker Desktop**.
+In our Windows check, Docker still published ports on all interfaces despite
+that option. Do not expose this local stack publicly.
+This repository already contains `supabase/config.toml` and its migrations, so do
+not run `supabase init`, `login`, `link`, cloud `db push`, or `db reset` for this
+setup. The initial local startup applies the checked-in migrations.
+
+Before configuring GreenCV, creating accounts, or uploading any CVs, inspect the
+actual published bindings after startup:
+
+```powershell
+docker ps --filter 'name=supabase_' --format 'table {{.Names}}\t{{.Ports}}'
+```
+
+Every host-side mapping must use `127.0.0.1` or `[::1]`. Bare container ports with
+no `->` are not published. No container rows means the stack is stopped or missing,
+not that the privacy check passed. If you see `0.0.0.0`, `[::]`, or another
+non-loopback host address, stop here and preserve the data while stopping the stack:
+
+```powershell
+$env:SUPABASE_TELEMETRY_DISABLED = '1'
+npx.cmd supabase stop
+```
+
+Do not continue until bindings have been corrected and checked again. A
+`localhost` URL in startup output does not establish that a port is private.
+
+On Docker Desktop, one option is to open **Settings**, find **Port binding
+behavior** in the network settings, and choose **Localhost by default**. This is
+a **Docker-wide default**, not a GreenCV-only setting, so make that change yourself
+only if its effect on other projects is acceptable. Apply the setting, restart
+the local stack, and repeat the binding check. See [Docker's networking guidance](https://docs.docker.com/desktop/features/networking/#how-exposed-ports-work)
+and [port-binding setting reference](https://docs.docker.com/enterprise/security/hardened-desktop/settings-management/settings-reference/#port-binding-behavior).
+If the option is unavailable or results remain unclear, keep the stack stopped
+and investigate before adding private data; no Docker-wide setting is changed by
+the commands in this guide.
+
+Once startup and the binding check pass, these are the local service addresses:
+
+| Service | Address |
+| --- | --- |
+| Studio: database, accounts, and storage UI | <http://127.0.0.1:54323> |
+| API used by GreenCV | <http://127.0.0.1:54321> |
+| PostgreSQL connection host and port | `127.0.0.1:54322` |
+
+Get the **local publishable key** from the startup output or:
+
+```powershell
+$env:SUPABASE_TELEMETRY_DISABLED = '1'
+npx.cmd supabase status
+```
+
+Status output also contains secrets: do not share screenshots, paste the output
+into issues, or commit it. Create the ignored `.env.local` file if it does not
+exist, or update only these entries in an existing file. Replace the key
+placeholder with the local publishable key, never a secret/service-role key:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_LOCAL_PUBLISHABLE_KEY
+NEXT_PUBLIC_APP_URL=http://localhost:4000
+OPENAI_API_KEY=
+MAX_EVALUATIONS_PER_DAY=0
+```
+
+Account, application, and CV testing does not require `SUPABASE_SECRET_KEY` or a
+cron secret. Keep the OpenAI key blank and the paid-evaluation limit at zero for
+no-cost local testing: attaching a CV can trigger automatic evaluation without
+clicking the Evaluate button. This does not change the user-owned evaluator.
+
+Restart the app with inherited paid-evaluation credentials cleared for this session:
+
+```powershell
+$env:OPENAI_API_KEY = ''
+$env:MAX_EVALUATIONS_PER_DAY = '0'
+npm.cmd run dev
+```
+
+Open <http://localhost:4000/login> and create a fictional local test account. Real
+accounts start with their own empty workspace; existing demo records in `.data/`
+are neither migrated nor deleted. Use a second fictional account to check that
+applications and private CV artifacts remain isolated between accounts. This is
+separate from `npm.cmd run test:e2e`, which intentionally tests JSON demo storage.
+
+When finished, stop the app with `Ctrl+C`, then stop Supabase without resetting
+its data:
+
+```powershell
+$env:SUPABASE_TELEMETRY_DISABLED = '1'
+npx.cmd supabase stop
+```
+
+Restart with `supabase start --network-id greencv-local` through `npx.cmd` next
+time. Do not add `--no-backup`, run `db reset`, or remove Docker volumes unless
+you intentionally want to discard local data. Normal stop preserves the database;
+see [the CLI stopping and telemetry guidance](https://supabase.com/docs/guides/local-development/cli/getting-started).
+
+## Continue on another desktop
+
+GitHub transfers the source code and database migrations, not `.env.local`, local
+accounts, application records, uploaded CVs, or Docker volumes. Keep the private
+transfer package separate from GitHub and transfer it through a trusted private
+channel; it contains sensitive data and must never be committed.
+
+1. Install Git, Node.js 22.13 or newer (Node.js 24 matches CI), and Docker Desktop.
+   Clone the repository and install its pinned dependencies:
+
+   ```powershell
+   git clone https://github.com/PheadDodo/Green_CV.git
+   cd Green_CV
+   npm.cmd ci
+   ```
+
+2. Start Docker Desktop's Linux engine. Follow the loopback-only network and
+   port-binding guidance in [Configure local PostgreSQL and accounts](#configure-local-postgresql-and-accounts).
+   **Do not start Supabase yet if restoring existing data.**
+3. Follow `RESTORE.md` inside the private transfer package. Restore only into
+   verified empty destination volumes, using the recorded compatible service
+   versions, before the first Supabase startup. Never overwrite an existing
+   database or use `db reset` as a restore step.
+4. After restoration, start Supabase and verify its private port bindings as
+   described above. Recreate the ignored `.env.local` with this desktop's local
+   API URL and publishable key, `NEXT_PUBLIC_APP_URL=http://localhost:4000`, a blank
+   `OPENAI_API_KEY`, and `MAX_EVALUATIONS_PER_DAY=0`. Do not assume old local keys
+   still apply or publish status output containing secrets.
+5. Run `npm.cmd run dev` and open <http://localhost:4000/login>. Check sign-in,
+   existing applications, PDF preview, and CV Markdown download. Keep the old
+   desktop's volumes and private backup until these checks pass.
+
+The project's workflow documentation travels with Git, but installed Matt Pocock
+engineering skills do not. Install those skills separately on the new desktop
+and follow [the project workflow](docs/agents/workflow.md). LLM evaluation and
+Azure deployment remain user-owned, deferred work.
+
+## Configure hosted PostgreSQL and accounts (optional, later)
+
+This hosted setup is not required for the local workflow above.
 
 Use a dedicated Supabase project. Copy `.env.example` to `.env.local`, then get the
 Project URL, publishable key, and secret key from the project's API Keys page:
@@ -54,7 +223,7 @@ Project URL, publishable key, and secret key from the project's API Keys page:
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:4000
 ```
 
 The publishable key is safe for the browser. The secret key bypasses Row Level
@@ -78,8 +247,8 @@ application's 4 MB upload limit.
 In Supabase Authentication → URL Configuration, set:
 
 ```text
-Site URL:      http://localhost:3000
-Redirect URL: http://localhost:3000/auth/callback
+Site URL:      http://localhost:4000
+Redirect URL: http://localhost:4000/auth/callback
 ```
 
 Replace both origins with the final HTTPS deployment URL when deploying.
@@ -142,3 +311,41 @@ brief extraction, closed-role lifecycle behavior, dashboard metrics, CV evidence
 safety, imports, URL SSRF protection, CV extraction, automation lifecycle,
 artifact access, ATS compatibility, reminder ownership and actions, configuration
 safety, and concurrent local persistence.
+
+### Local browser tests
+
+Install the test browser once after installing npm dependencies:
+
+```powershell
+npx.cmd playwright install chromium
+```
+
+Run the browser checks without starting a server yourself:
+
+```powershell
+npm.cmd run test:e2e
+```
+
+Playwright starts a separate loopback-only development server on port `3100` and
+stops it afterward. The port must be free: tests deliberately refuse to reuse an
+existing server. Every run creates its own ignored `.data/e2e/run-*` directory for
+fictional records and CV files, leaving the normal demo workspace untouched. These
+small test directories remain for inspection; screenshots, traces, and the HTML
+report also stay ignored. Supabase and OpenAI credentials are blanked for the test
+server even if they are configured in your environment files.
+
+The checks exercise the actual browser, app routes, and local file storage:
+
+- Create an application, progress through Applied → Interview → Offer, reload,
+  verify current-status and funnel counts, then delete the test application.
+- Upload a fictional PDF, verify the document supplied to the preview window,
+  inspect ATS section detection, and download Markdown with preserved headings
+  and word spacing.
+- Select and unselect a CV, verify future defaults and existing attachments,
+  cancel then confirm deletion, and verify deleted artifacts are unavailable.
+
+These are local development checks, not PostgreSQL/authentication, LLM, Azure,
+server-restart persistence, or native PDF-viewer visual tests. Run them separately
+from builds/type generation: Next.js still regenerates the ignored `next-env.d.ts`
+even though browser tests use their own build cache and TypeScript configuration.
+The existing GitHub Actions checks remain unchanged; browser tests are run locally.

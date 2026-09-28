@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Isolate browser-test caches without changing the normal development server.
+  ...(process.env.GREEN_CV_E2E === "1" ? {
+    distDir: ".next/e2e",
+    typescript: { tsconfigPath: "e2e/tsconfig.json" },
+  } : {}),
   typedRoutes: false,
   async headers() {
     return [
