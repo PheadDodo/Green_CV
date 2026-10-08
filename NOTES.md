@@ -111,6 +111,19 @@ These definitions live in tested domain code, not in presentation components.
 - Browser-local interview times are converted to absolute ISO instants before they
   reach the server, so reminder timing does not depend on the deployment region.
 
+## LLM provider preference
+
+- LLM settings are owner-scoped and select the server default, an API provider,
+  or a local model. Explicit provider selection never silently falls back.
+- API keys stay encrypted in private server storage and are write-only to clients.
+  A provider or endpoint change cannot carry the old key to an unrelated target.
+- Provider adapters change transport only. The shared evaluation prompt, result
+  validation, scoring, and evidence checks continue to apply to every model.
+- Reuse includes the provider configuration fingerprint; historical results retain
+  their model and provider mode. Local and demo evaluations bypass paid API quota.
+- Local endpoints are loopback-only and available during local development.
+  Connection checks request model metadata without sending job or CV content.
+
 ## Demo account behavior
 
 - Local demo mode has no authentication account and therefore no password to

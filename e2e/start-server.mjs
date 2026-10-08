@@ -27,6 +27,8 @@ const server = spawn(process.execPath, [
     SUPABASE_SECRET_KEY: "",
     SUPABASE_SERVICE_ROLE_KEY: "",
     OPENAI_API_KEY: "",
+    LLM_SETTINGS_ENCRYPTION_KEY: "",
+    MAX_EVALUATIONS_PER_DAY: "0",
     CRON_SECRET: "",
   },
 });

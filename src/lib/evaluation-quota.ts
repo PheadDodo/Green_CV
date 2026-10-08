@@ -30,3 +30,14 @@ export function countEvaluationsToday(
     return Number.isFinite(createdAt) && createdAt >= start && createdAt <= now.getTime();
   }).length;
 }
+
+/** Paid-provider reservations, including conservative handling of older records. */
+export function countPaidEvaluationsToday(
+  evaluations: Evaluation[],
+  now = new Date(),
+): number {
+  return countEvaluationsToday(evaluations.filter(evaluation =>
+    evaluation.providerMode === "api" ||
+    (evaluation.providerMode == null && evaluation.model !== "deterministic-demo-evaluator"),
+  ), now);
+}

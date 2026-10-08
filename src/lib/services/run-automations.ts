@@ -1,3 +1,7 @@
+import { createAutomationIdempotencyKey } from "@/lib/automation/idempotency";
+import { usesLlmConfiguration } from "@/lib/llm/evaluation-config";
+import { resolveLlmConfig } from "@/lib/llm/settings";
+import type { ResolvedLlmConfig } from "@/lib/llm/types";
 import { createAutomationEngine } from "@/lib/automation/engine";
 import { createAutoEvaluationRule, createFollowUpReminderRule, createInterviewPrepRule } from "@/lib/automation/rules";
 import type {
@@ -167,6 +171,14 @@ export async function runAutomations(repository: DataRepository, userId: string)
   const [rules, applications] = await Promise.all([repository.listAutomationRules(), repository.listApplications()]);
   const configuredRules = engineRules(rules);
   if (!configuredRules.length) return { evaluated: applications.length, intents: 0, succeeded: 0, failed: 0, skipped: 0 };
+  let evaluationConfig: ResolvedLlmConfig | null = null;
+  if (rules.some(rule => rule.enabled && rule.type === "auto_evaluate")) {
+    try {
+      evaluationConfig = await resolveLlmConfig(repository);
+    } catch {
+      // Let evaluation execution record a safe failed run; reminders remain usable.
+    }
+  }
   const engine = createAutomationEngine({ rules: configuredRules });
   const evaluationsByJob = new Map<string, Awaited<ReturnType<DataRepository["listEvaluations"]>>>();
   for (const jobId of new Set(applications.map(application => application.jobId))) evaluationsByJob.set(jobId, await repository.listEvaluations(jobId));
@@ -175,8 +187,14 @@ export async function runAutomations(repository: DataRepository, userId: string)
     application: { id: application.id, jobId: application.jobId, status: application.status, cvVersionId: application.cvVersionId, appliedAt: application.appliedAt, lastEmployerContactAt: lastEventAt(application, ["follow_up"]) },
     job: { id: application.job.id, title: application.job.title, company: application.job.company, description: application.job.description, updatedAt: application.job.updatedAt },
     interviewAt: interviewAt(application),
-    evaluations: (evaluationsByJob.get(application.jobId) ?? []).filter(value => value.applicationId === application.id).map(value => ({ status: value.status, cvVersionId: value.cvVersionId, jobUpdatedAt: undefined }))
-  }).intents);
+    evaluations: (evaluationsByJob.get(application.jobId) ?? []).filter(value => value.applicationId === application.id && evaluationConfig !== null && usesLlmConfiguration(value, evaluationConfig)).map(value => ({ status: value.status, cvVersionId: value.cvVersionId, jobUpdatedAt: undefined }))
+  }).intents.map(intent => intent.action === "evaluation.request" ? {
+    ...intent,
+    idempotencyKey: createAutomationIdempotencyKey(intent.ruleId, {
+      intentKey: intent.idempotencyKey,
+      providerFingerprint: evaluationConfig?.fingerprint ?? "unavailable-provider-settings",
+    }),
+  } : intent));
   const results = [];
   for (const intent of intents) results.push(await executeIntent(repository, rules, intent));
   return { evaluated: applications.length, intents: intents.length, succeeded: results.filter(item => item.status === "succeeded").length, failed: results.filter(item => item.status === "failed").length, skipped: results.filter(item => item.status === "skipped").length };

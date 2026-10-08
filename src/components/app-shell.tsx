@@ -23,6 +23,7 @@ const links = [
   { href: "/cvs", label: "CV library", icon: FileStack },
   { href: "/imports", label: "Imports", icon: Upload },
   { href: "/settings/automation", label: "Automation", icon: Settings2 },
+  { href: "/settings/llm", label: "LLM settings", icon: Sparkles },
   { href: "/settings/account", label: "Account security", icon: ShieldCheck }
 ];
 

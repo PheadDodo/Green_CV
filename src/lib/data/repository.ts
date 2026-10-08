@@ -1,3 +1,5 @@
+import type { LlmSettings } from "../llm/types";
+
 import type {
   AutomationRule,
   AutomationRuleUpsertInput,
@@ -38,6 +40,9 @@ import type {
 export interface DataRepository {
   readonly mode: "supabase" | "local";
   readonly userId: string;
+
+  getLlmSettings(): Promise<LlmSettings | null>;
+  saveLlmSettings(settings: LlmSettings): Promise<LlmSettings>;
 
   listApplications(options?: ApplicationListOptions): Promise<ApplicationRecord[]>;
   getApplication(id: string): Promise<ApplicationRecord | null>;
