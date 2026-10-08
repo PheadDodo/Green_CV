@@ -1,6 +1,8 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { LlmSettings } from "../llm/types";
+
 import {
   calculateDashboardSnapshot,
   DataConflictError,
@@ -50,6 +52,26 @@ import type {
   Reminder,
   ReminderUpsertInput,
 } from "./types";
+
+interface LocalLlmSettingsDocument {
+  schemaVersion: 1;
+  settings: (LlmSettings & { userId: string })[];
+}
+
+async function readLlmSettingsDocument(filePath: string): Promise<LocalLlmSettingsDocument> {
+  try {
+    const value: unknown = JSON.parse(await readFile(filePath, "utf8"));
+    if (typeof value !== "object" || value === null ||
+      !("schemaVersion" in value) || value.schemaVersion !== 1 ||
+      !("settings" in value) || !Array.isArray(value.settings)) {
+      throw new DataConflictError("Unsupported local LLM settings schema.");
+    }
+    return value as LocalLlmSettingsDocument;
+  } catch (error) {
+    if (!isNodeError(error, "ENOENT")) throw error;
+    return { schemaVersion: 1, settings: [] };
+  }
+}
 
 const DEFAULT_STORE_PATH = path.join(process.cwd(), ".data", "jobs-summary.json");
 let mutationQueue: Promise<void> = Promise.resolve();
@@ -114,7 +136,10 @@ function normalizeDocument(value: unknown, seedUserId: string): DataStoreDocumen
   return value as DataStoreDocument;
 }
 
-async function writeDocument(filePath: string, document: DataStoreDocument): Promise<void> {
+async function writeDocument(
+  filePath: string,
+  document: DataStoreDocument | LocalLlmSettingsDocument,
+): Promise<void> {
   const directory = path.dirname(filePath);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.${globalThis.crypto.randomUUID()}.tmp`;
@@ -358,6 +383,28 @@ export class LocalDataRepository implements DataRepository {
       const result = await operation(document);
       await writeDocument(this.filePath, document);
       return clone(result);
+    });
+  }
+
+  async getLlmSettings(): Promise<LlmSettings | null> {
+    const document = await readLlmSettingsDocument(this.filePath + ".llm-settings.json");
+    const owned = document.settings.find((settings) => settings.userId === this.userId);
+    if (!owned) return null;
+    return clone({ mode: owned.mode, protocol: owned.protocol, baseUrl: owned.baseUrl,
+      model: owned.model, apiKeyEncrypted: owned.apiKeyEncrypted, updatedAt: owned.updatedAt });
+  }
+
+  saveLlmSettings(settings: LlmSettings): Promise<LlmSettings> {
+    return enqueueMutation(async () => {
+      const filePath = this.filePath + ".llm-settings.json";
+      const document = await readLlmSettingsDocument(filePath);
+      const saved = { ...clone(settings), updatedAt: settings.updatedAt ?? now() };
+      const index = document.settings.findIndex((candidate) => candidate.userId === this.userId);
+      const owned = { ...saved, userId: this.userId };
+      if (index < 0) document.settings.push(owned);
+      else document.settings[index] = owned;
+      await writeDocument(filePath, document);
+      return clone(saved);
     });
   }
 
@@ -758,6 +805,8 @@ export class LocalDataRepository implements DataRepository {
         suggestedEdits: input.suggestedEdits ?? [],
         model: input.model?.trim() || null,
         promptVersion: input.promptVersion?.trim() || null,
+        providerMode: input.providerMode ?? null,
+        providerFingerprint: input.providerFingerprint ?? null,
         errorMessage: input.errorMessage?.trim() || null,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -791,6 +840,8 @@ export class LocalDataRepository implements DataRepository {
       if (input.evidence !== undefined) evaluation.evidence = input.evidence;
       if (input.suggestedEdits !== undefined) evaluation.suggestedEdits = input.suggestedEdits;
       if (input.model !== undefined) evaluation.model = input.model?.trim() || null;
+      if (input.providerMode !== undefined) evaluation.providerMode = input.providerMode;
+      if (input.providerFingerprint !== undefined) evaluation.providerFingerprint = input.providerFingerprint;
       if (input.promptVersion !== undefined) {
         evaluation.promptVersion = input.promptVersion?.trim() || null;
       }

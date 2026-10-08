@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type { LlmSettings } from "../llm/types";
 import type { Database, Json, Tables } from "../supabase/database.types";
 import {
   calculateDashboardSnapshot,
@@ -190,6 +191,8 @@ function toEvaluation(row: EvaluationRow): Evaluation {
     suggestedEdits: stringArray(row.suggested_edits),
     model: row.model,
     promptVersion: row.prompt_version,
+    providerMode: row.provider_mode,
+    providerFingerprint: row.provider_fingerprint,
     errorMessage: row.error_message,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -383,6 +386,37 @@ export class SupabaseDataRepository implements DataRepository {
         events: events.filter((event) => event.applicationId === row.id),
       };
     });
+  }
+
+  async getLlmSettings(): Promise<LlmSettings | null> {
+    const { data, error } = await this.client.from("llm_settings")
+      .select("*").eq("user_id", this.userId).maybeSingle();
+    throwQueryError(error);
+    if (!data || data.user_id !== this.userId) return null;
+    return {
+      mode: data.mode, protocol: data.protocol, baseUrl: data.base_url,
+      model: data.model, apiKeyEncrypted: data.api_key_encrypted, updatedAt: data.updated_at,
+    };
+  }
+
+  async saveLlmSettings(settings: LlmSettings): Promise<LlmSettings> {
+    const { data, error } = await this.client.from("llm_settings").upsert({
+      user_id: this.userId,
+      mode: settings.mode,
+      protocol: settings.protocol,
+      base_url: settings.baseUrl,
+      model: settings.model,
+      api_key_encrypted: settings.apiKeyEncrypted,
+      updated_at: settings.updatedAt ?? new Date().toISOString(),
+    }, { onConflict: "user_id" }).eq("user_id", this.userId).select("*").single();
+    throwQueryError(error);
+    if (!data || data.user_id !== this.userId) {
+      throw new Error("Supabase did not return the saved LLM settings.");
+    }
+    return {
+      mode: data.mode, protocol: data.protocol, baseUrl: data.base_url,
+      model: data.model, apiKeyEncrypted: data.api_key_encrypted, updatedAt: data.updated_at,
+    };
   }
 
   async listApplications(options: ApplicationListOptions = {}): Promise<ApplicationRecord[]> {
@@ -747,6 +781,8 @@ export class SupabaseDataRepository implements DataRepository {
         suggested_edits: json(input.suggestedEdits ?? []),
         model: input.model?.trim() || null,
         prompt_version: input.promptVersion?.trim() || null,
+        provider_mode: input.providerMode ?? null,
+        provider_fingerprint: input.providerFingerprint ?? null,
         error_message: input.errorMessage?.trim() || null,
         completed_at:
           input.completedAt ?? (status === "completed" ? new Date().toISOString() : null),
@@ -770,6 +806,8 @@ export class SupabaseDataRepository implements DataRepository {
     if (input.evidence !== undefined) update.evidence = json(input.evidence);
     if (input.suggestedEdits !== undefined) update.suggested_edits = json(input.suggestedEdits);
     if (input.model !== undefined) update.model = input.model?.trim() || null;
+    if (input.providerMode !== undefined) update.provider_mode = input.providerMode;
+    if (input.providerFingerprint !== undefined) update.provider_fingerprint = input.providerFingerprint;
     if (input.promptVersion !== undefined) {
       update.prompt_version = input.promptVersion?.trim() || null;
     }

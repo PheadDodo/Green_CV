@@ -3,6 +3,28 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type Database = {
   public: {
     Tables: {
+      llm_settings: {
+        Row: {
+          user_id: string;
+          mode: "default" | "api" | "local";
+          protocol: "openai" | "anthropic" | "ollama";
+          base_url: string;
+          model: string;
+          api_key_encrypted: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          mode: "default" | "api" | "local";
+          protocol: "openai" | "anthropic" | "ollama";
+          base_url: string;
+          model: string;
+          api_key_encrypted?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["llm_settings"]["Insert"]>;
+        Relationships: [];
+      };
       jobs: {
         Row: {
           id: string;
@@ -152,6 +174,8 @@ export type Database = {
           suggested_edits: Json;
           model: string | null;
           prompt_version: string | null;
+          provider_mode: "api" | "local" | "demo" | null;
+          provider_fingerprint: string | null;
           error_message: string | null;
           created_at: string;
           updated_at: string;
@@ -173,6 +197,8 @@ export type Database = {
           suggested_edits?: Json;
           model?: string | null;
           prompt_version?: string | null;
+          provider_mode?: "api" | "local" | "demo" | null;
+          provider_fingerprint?: string | null;
           error_message?: string | null;
           created_at?: string;
           updated_at?: string;

@@ -159,6 +159,8 @@ export interface Evaluation {
   suggestedEdits: string[];
   model: string | null;
   promptVersion: string | null;
+  providerMode?: "api" | "local" | "demo" | null;
+  providerFingerprint?: string | null;
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
@@ -309,6 +311,8 @@ export interface EvaluationCreateInput {
   suggestedEdits?: string[];
   model?: string | null;
   promptVersion?: string | null;
+  providerMode?: "api" | "local" | "demo" | null;
+  providerFingerprint?: string | null;
   errorMessage?: string | null;
   completedAt?: string | null;
 }
