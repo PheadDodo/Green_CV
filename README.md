@@ -49,7 +49,64 @@ Main routes:
 - `/cvs` — upload, select or unselect, privately preview, ATS-check, download, or delete CVs
 - `/imports` — deletable audit history for CSV batches (up to 100 rows) and SSRF-safe public job URL previews
 - `/settings/automation` — editable reminder timing, run history, retries, and safe cancellation
+- `/settings/llm` — choose an API or local LLM, set its endpoint/model, and test the saved connection
 - `/settings/account` — password and account-security controls
+
+## Choose an LLM provider
+
+Open **LLM settings** in the navigation. Select **LLM API** or **Local LLM**, choose
+the API format, enter the base URL and exact model ID, then save. **Test saved
+connection** requests only the provider's model list; it does not send CVs, job
+descriptions, or generation requests. Model-list access does not guarantee that a
+model can generate a valid evaluation, and some providers do not expose a model list.
+
+Supported API formats:
+
+| Format | Example base URL | Use |
+| --- | --- | --- |
+| OpenAI-compatible | `https://api.openai.com/v1` | OpenAI and compatible cloud chat APIs |
+| Claude / Anthropic | `https://api.anthropic.com/v1` | Anthropic Messages API |
+| Ollama | `http://127.0.0.1:11434` | Native local Ollama API |
+| OpenAI-compatible (local) | `http://127.0.0.1:1234/v1` | LM Studio, llama.cpp, Ollama's `/v1` API, and compatible local servers |
+
+Use the base URL including its API prefix, without the final `chat/completions`,
+`messages`, or `api/chat` path. The model must support the selected API format and
+produce the required JSON evaluation. Providers with a different protocol need a
+new adapter; selecting an arbitrary provider name does not translate its API.
+
+Local servers must run on the same machine as GreenCV and use a loopback address.
+This option is available in development mode. A hosted server's localhost is the
+hosting machine, so it cannot reach an LLM on your laptop through this setting.
+Choose an on-device model: a loopback address identifies the server, but a gateway
+or a cloud-backed model can still forward requests to a cloud provider.
+Cloud API base URLs must use HTTPS and resolve to public addresses.
+
+Each account owns its settings. API keys are encrypted at rest and are never
+returned by the settings API. A blank key keeps the existing key only for the same
+provider and endpoint; changing that target requires a new key. Local model keys
+are optional. Selecting **Server default** restores the existing
+`OPENAI_API_KEY` / `OPENAI_MODEL` behavior, or the deterministic evaluator if no
+server key is configured. Explicit provider errors never switch to another model.
+Saved API settings may incur charges even when the server's OpenAI key is blank;
+set `MAX_EVALUATIONS_PER_DAY=0` to disable paid API evaluations. Local and demo
+evaluations do not consume that API allowance.
+
+For Supabase-backed settings, apply the new checked-in LLM settings migration
+using the project's existing migration workflow. Set the server-only
+`LLM_SETTINGS_ENCRYPTION_KEY` to 32 random bytes encoded as base64 before saving
+keys. Generate it once from the project directory:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+Keep this key stable and include it in private backups; replacing it makes saved
+API keys unreadable. Local JSON development automatically creates an ignored key
+beside the data file and stores encrypted settings in a separate ignored file.
+Back up those files together when moving your private workspace. Existing
+evaluation results are retained; provider, endpoint, and model changes prevent
+reuse of a result from a different configuration. Prompt and scoring rules remain
+the evaluator's existing rules.
 
 ## Configure local PostgreSQL and accounts
 

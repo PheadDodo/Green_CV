@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { Evaluation } from "./data/types";
-import { countEvaluationsToday, getDailyEvaluationLimit } from "./evaluation-quota";
+import { countEvaluationsToday, countPaidEvaluationsToday, getDailyEvaluationLimit } from "./evaluation-quota";
 
 const originalLimit = process.env.MAX_EVALUATIONS_PER_DAY;
 
@@ -40,5 +40,29 @@ describe("evaluation quota", () => {
         now,
       ),
     ).toBe(2);
+  });
+});
+
+describe("paid evaluation counting", () => {
+  it("counts API attempts and older paid records while excluding local and demo runs", () => {
+    const now = new Date("2026-10-08T12:00:00.000Z");
+    const today = "2026-10-08T11:00:00.000Z";
+    const records = [
+      { ...evaluation(today), providerMode: "api", model: "api-model" },
+      { ...evaluation(today), providerMode: "local", model: "local-model" },
+      { ...evaluation(today), providerMode: "demo", model: "deterministic-demo-evaluator" },
+      { ...evaluation(today), model: "original-openai-model" },
+      { ...evaluation(today), model: "deterministic-demo-evaluator" },
+      { ...evaluation("2026-10-07T23:59:59.999Z"), providerMode: "api", model: "api-model" },
+    ] as Evaluation[];
+    expect(countPaidEvaluationsToday(records, now)).toBe(2);
+    expect(countEvaluationsToday(records, now)).toBe(5);
+  });
+
+  it("conservatively counts historical reservations before a model was recorded", () => {
+    const now = new Date("2026-10-08T12:00:00.000Z");
+    expect(countPaidEvaluationsToday([
+      { ...evaluation("2026-10-08T11:00:00.000Z"), model: null, providerMode: null, status: "running" },
+    ] as Evaluation[], now)).toBe(1);
   });
 });

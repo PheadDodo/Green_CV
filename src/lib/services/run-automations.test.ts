@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resolveLlmConfig } from "@/lib/llm/settings";
 import { LocalDataRepository } from "@/lib/data/local-repository";
 import {
   REMINDER_AUTOMATION_RUN_LEASE_MS,
@@ -24,10 +25,12 @@ vi.mock("./evaluate-application", () => ({
 const temporaryDirectories: string[] = [];
 
 beforeEach(() => {
+  vi.stubEnv("OPENAI_API_KEY", "");
   mocks.evaluateApplication.mockReset().mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   await Promise.all(
     temporaryDirectories
@@ -236,5 +239,70 @@ describe("runAutomations reminder execution", () => {
     expect(await repository.listAutomationRuns({ applicationId: application.id })).toEqual([
       expect.objectContaining({ type: "auto_evaluate", status: "succeeded", attempts: 1 }),
     ]);
+  });
+});
+
+describe("automatic evaluation provider settings", () => {
+  it("re-evaluates with changed provider or model without repeating unchanged completed work", async () => {
+    const repository = await createRepository("provider-change-user");
+    await enableOnly(repository, "auto_evaluate", { minimumDescriptionLength: 40 });
+    await archiveSeedApplications(repository);
+    const cv = (await repository.listCvVersions())[0];
+    const application = await repository.createApplication({
+      job: { title: "Engineer", company: "Example", description: "Build reliable Python services with measurable production outcomes." },
+      application: { cvVersionId: cv.id },
+    });
+    mocks.evaluateApplication.mockImplementation(async (ownerRepository, applicationId) => {
+      const selected = await resolveLlmConfig(ownerRepository);
+      await ownerRepository.createEvaluation({
+        applicationId, cvVersionId: cv.id, status: "completed",
+        model: selected.model, providerMode: selected.mode, providerFingerprint: selected.fingerprint,
+        promptVersion: "3.0",
+      });
+    });
+
+    expect(await runAutomations(repository, repository.userId)).toMatchObject({ intents: 1, succeeded: 1 });
+    expect(await runAutomations(repository, repository.userId)).toMatchObject({ intents: 0 });
+    await repository.saveLlmSettings({
+      mode: "local", protocol: "ollama", baseUrl: "http://127.0.0.1:11434",
+      model: "first-local-model", apiKeyEncrypted: null, updatedAt: new Date().toISOString(),
+    });
+    expect(await runAutomations(repository, repository.userId)).toMatchObject({ intents: 1, succeeded: 1 });
+    expect(await runAutomations(repository, repository.userId)).toMatchObject({ intents: 0 });
+    await repository.saveLlmSettings({
+      mode: "local", protocol: "ollama", baseUrl: "http://127.0.0.1:11434",
+      model: "second-local-model", apiKeyEncrypted: null, updatedAt: new Date().toISOString(),
+    });
+    expect(await runAutomations(repository, repository.userId)).toMatchObject({ intents: 1, succeeded: 1 });
+
+    const evaluations = (await repository.listEvaluations(application.jobId)).filter(item => item.applicationId === application.id);
+    const runs = await repository.listAutomationRuns({ applicationId: application.id });
+    expect(evaluations).toHaveLength(3);
+    expect(new Set(evaluations.map(item => item.providerFingerprint)).size).toBe(3);
+    expect(runs).toHaveLength(3);
+    expect(new Set(runs.map(item => item.idempotencyKey)).size).toBe(3);
+    expect(mocks.evaluateApplication).toHaveBeenCalledTimes(3);
+  });
+
+  it("continues reminder work while an automatic evaluation has invalid provider settings", async () => {
+    const repository = await createRepository("provider-failure-reminder-user");
+    const application = await createDueFollowUp(repository);
+    const cv = (await repository.listCvVersions())[0];
+    await repository.updateApplicationCv(application.id, cv.id);
+    const auto = (await repository.listAutomationRules()).find(rule => rule.type === "auto_evaluate")!;
+    await repository.upsertAutomationRule({ id: auto.id, type: auto.type, enabled: true, config: { minimumDescriptionLength: 40 } });
+    await repository.saveLlmSettings({
+      mode: "local", protocol: "ollama", baseUrl: "http://127.0.0.1:11434",
+      model: "", apiKeyEncrypted: null, updatedAt: new Date().toISOString(),
+    });
+    mocks.evaluateApplication.mockRejectedValue(new Error("Enter a model name."));
+
+    const output = await runAutomations(repository, repository.userId);
+    expect(output).toMatchObject({ intents: 2, succeeded: 1, failed: 1 });
+    expect((await repository.listReminders()).filter(item => item.applicationId === application.id)).toHaveLength(1);
+    expect(await repository.listAutomationRuns({ applicationId: application.id })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "follow_up", status: "succeeded" }),
+      expect.objectContaining({ type: "auto_evaluate", status: "failed", errorMessage: "Enter a model name." }),
+    ]));
   });
 });
